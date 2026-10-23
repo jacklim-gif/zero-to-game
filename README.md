@@ -41,7 +41,7 @@ npm run dist:linux   # Linux
 
 ## 现在有什么
 
-**第 0 章：Unity 入门**，共 12 步，约 30 分钟：
+**第 0 章：Unity 入门**，共 13 步，约 30 分钟。界面有中文和英文两种，主页右上角可以切换。教练会用发亮的边框、箭头和拖动动画告诉你下一步点哪里、拖什么。
 
 1. 认识五个窗口：Hierarchy、Scene、Game、Inspector、Project
 2. 创建一个方块
@@ -54,9 +54,10 @@ npm run dist:linux   # Linux
 9. 第一段 C# 脚本（可以点每一行看解释）
 10. 调整摄像机
 11. 点 Play，用 WASD 走动
-12. 保存场景
+12. 加 Rigidbody（刚体），走出地板会掉下去
+13. 保存场景
 
-模拟器也会重现新手常犯的错：脚本名字和 class 不一致会在 Console 报红字；Play 模式下的修改停止后会还原；没保存的场景名字后面有 `*`。
+模拟器也会重现新手常犯的错：脚本名字和 class 不一致会在 Console 报红字；Play 模式下的修改停止后会还原；没加 Rigidbody 的方块走出地板会浮在空中；没保存的场景名字后面有 `*`。
 
 ## 路线图
 
@@ -69,7 +70,11 @@ npm run dist:linux   # Linux
 ## 项目结构
 
 ```
-app/index.html          整个虚拟编辑器和教练（界面、3D 视图、步骤都在这里）
+app/index.html          页面结构
+app/styles.css          样式
+app/i18n.js             界面文字（中文 / English）
+app/chapters/ch0.js     第 0 章的教练步骤
+app/editor.js           虚拟编辑器：3D 视图、拖放、物理、教练提示
 main.js                 桌面 app 入口（Electron）
 build/icon.png          app 图标
 scripts/smoke.js        冒烟测试：打开 app 截图，npm run smoke
@@ -79,7 +84,7 @@ docs/                   截图
 
 ### 怎么加一章或改步骤
 
-步骤写在 `app/index.html` 里的 `STEPS` 数组。每一步有：
+步骤写在 `app/chapters/ch0.js` 里的 `STEPS` 数组。文字都写成 `{zh: '中文', en: 'English'}`。每一步有：
 
 - `title`：标题
 - `body`：说明文字
@@ -87,6 +92,9 @@ docs/                   截图
 - `hint`：提示
 - `auto`：「帮我做这一步」按钮要做的事
 - `glow`：要发亮提示的界面区域
+- `point`：箭头指向哪里，或者演示从哪里拖到哪里
+
+界面上的文字（按钮、菜单、窗口名字）在 `app/i18n.js`。
 
 ## 发布新版本
 

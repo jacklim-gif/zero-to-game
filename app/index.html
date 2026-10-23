@@ -11,81 +11,84 @@
 </head>
 <body>
 <div class="home" id="home">
+  <button class="linkbtn langbtn home-lang" type="button">English</button>
   <div class="home-in">
     <div class="home-head">
       <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect x="2" y="2" width="60" height="60" rx="14" fill="#1c2027"/><path d="M32 12 49 22 32 32 15 22z" fill="#ffaa5a"/><path d="M15 22 32 32v20L15 42z" fill="#ff8a1f"/><path d="M49 22 32 32v20l17-10z" fill="#c4620e"/></svg>
-      <div><h1>从零到游戏</h1><p>在一个模拟的 Unity 编辑器里，跟着教练一步一步做出你的第一个游戏。不用安装 Unity，做错了也不会弄坏任何东西。</p></div>
+      <div><h1 data-i18n="appTitle">从零到游戏</h1><p data-i18n="homeIntro"></p></div>
     </div>
     <div class="chapters">
-      <button class="chap" id="chap0"><span class="cn">第 0 章</span><b>Unity 入门</b><span class="d">认识界面，做一个能用 WASD 走动的方块。12 步，约 30 分钟。</span><span class="st" id="chap0st">开始</span></button>
-      <div class="chap locked"><span class="cn">第 1 章</span><b>恐怖游戏</b><span class="d">黑暗走廊、手电筒、脚步声，和一个会追你的怪物。</span><span class="st">即将推出</span></div>
-      <div class="chap locked"><span class="cn">第 2 章</span><b>生存游戏</b><span class="d">饥饿和口渴、采集、合成斧头、昼夜变化。</span><span class="st">即将推出</span></div>
-      <div class="chap locked"><span class="cn">第 3 章</span><b>沙盒游戏</b><span class="d">网格建造：放置、删除、半透明预览。</span><span class="st">即将推出</span></div>
-      <div class="chap locked"><span class="cn">第 4 章</span><b>美化通用篇</b><span class="d">调色盘、灯光三件套、挑 Asset、摆放装饰品。</span><span class="st">即将推出</span></div>
+      <button class="chap" id="chap0"><span class="cn" data-i18n="chN" data-n="0">第 0 章</span><b id="ch0title">Unity 入门</b><span class="d" id="ch0desc"></span><span class="st" id="chap0st">开始</span></button>
+      <div class="chap locked"><span class="cn" data-i18n="chN" data-n="1"></span><b data-i18n="ch1t"></b><span class="d" data-i18n="ch1d"></span><span class="st" data-i18n="soon"></span></div>
+      <div class="chap locked"><span class="cn" data-i18n="chN" data-n="2"></span><b data-i18n="ch2t"></b><span class="d" data-i18n="ch2d"></span><span class="st" data-i18n="soon"></span></div>
+      <div class="chap locked"><span class="cn" data-i18n="chN" data-n="3"></span><b data-i18n="ch3t"></b><span class="d" data-i18n="ch3d"></span><span class="st" data-i18n="soon"></span></div>
+      <div class="chap locked"><span class="cn" data-i18n="chN" data-n="4"></span><b data-i18n="ch4t"></b><span class="d" data-i18n="ch4d"></span><span class="st" data-i18n="soon"></span></div>
     </div>
-    <p class="fine">界面仿照 Unity 6.3 LTS，是练习用的模拟器。学会之后，请在真正的 Unity 里照着同样的步骤再做一遍。本项目与 Unity Technologies 没有关联。</p>
+    <p class="fine" data-i18n="fine"></p>
   </div>
 </div>
 
 <div class="app" id="app">
   <div class="panel" id="p-top">
     <span class="brand">Zero to Game</span>
-    <button class="mbtn" data-menu="file" id="menu-file">File</button>
-    <button class="mbtn" data-menu="edit">Edit</button>
-    <button class="mbtn" data-menu="go">GameObject</button>
-    <button class="mbtn" data-menu="window">Window</button>
+    <button class="mbtn" data-menu="file" id="menu-file" data-i18n="mFile" data-tip>File</button>
+    <button class="mbtn" data-menu="edit" data-i18n="mEdit" data-tip>Edit</button>
+    <button class="mbtn" data-menu="go" data-i18n="mGo" data-tip>GameObject</button>
+    <button class="mbtn" data-menu="window" data-i18n="mWindow" data-tip>Window</button>
     <span class="sp"></span>
-    <div class="play"><button id="playbtn" aria-label="Play">▶ Play</button><button id="pausebtn" aria-label="Pause">❚❚</button></div>
+    <div class="play"><button id="playbtn" data-i18n="playBtn" data-i18n-aria="play" data-tip>▶ Play</button><button id="pausebtn" data-i18n-aria="pause">❚❚</button></div>
     <span class="sp"></span>
     <span class="scene-name" id="scenename">SampleScene</span>
-    <button class="linkbtn" id="homebtn">主页</button>
-    <button class="linkbtn" id="resetbtn">重新开始</button>
+    <button class="linkbtn langbtn" type="button">English</button>
+    <button class="linkbtn" id="homebtn" data-i18n="home">主页</button>
+    <button class="linkbtn" id="resetbtn" data-i18n="restart">重新开始</button>
   </div>
 
   <div class="panel" id="p-guide">
-    <div class="ph"><b>教练</b><span class="sp"></span><span>第 0 章 · Unity 入门</span></div>
+    <div class="ph"><b data-i18n="coach">教练</b><span class="sp"></span><span id="chaptag"></span></div>
     <div class="pb" id="guide-body"></div>
   </div>
 
   <div class="panel" id="p-scene">
     <div class="ph">
-      <button class="tab on" id="tab-scene" data-tab="scene">Scene</button>
-      <button class="tab" id="tab-game" data-tab="game">Game</button>
+      <button class="tab on" id="tab-scene" data-tab="scene" data-i18n="scene" data-tip>Scene</button>
+      <button class="tab" id="tab-game" data-tab="game" data-i18n="game" data-tip>Game</button>
       <span class="sp"></span>
       <div class="tools" id="tools">
-        <button data-tool="q" title="Q 手形">Q</button><button data-tool="w" title="W 移动">W</button>
-        <button data-tool="e" title="E 旋转">E</button><button data-tool="r" title="R 缩放">R</button>
+        <button data-tool="q" data-i18n-title="tQ">Q</button><button data-tool="w" data-i18n-title="tW">W</button>
+        <button data-tool="e" data-i18n-title="tE">E</button><button data-tool="r" data-i18n-title="tR">R</button>
       </div>
     </div>
     <div class="canvaswrap" id="cwrap" data-drop="scene">
-      <canvas id="cv" aria-label="3D 视图"></canvas>
+      <canvas id="cv" data-i18n-aria="view3d"></canvas>
       <div class="hintline" id="toolhint"></div>
-      <div class="playbanner" id="banner" hidden>Play 模式：现在做的改动，停止后会全部还原</div>
+      <div class="playbanner" id="banner" data-i18n="banner" hidden></div>
       <div class="toast" id="toast"></div>
     </div>
   </div>
 
   <div class="panel" id="p-hier">
-    <div class="ph"><b>Hierarchy</b><span class="sp"></span><button class="ibtn" id="hier-plus" aria-label="新建物体">+</button></div>
+    <div class="ph"><b data-i18n="hier" data-tip>Hierarchy</b><span class="sp"></span><button class="ibtn" id="hier-plus" data-i18n-aria="newObj">+</button></div>
     <div class="pb" id="hier-body" data-drop="hier"></div>
   </div>
 
   <div class="panel" id="p-proj">
     <div class="ph">
-      <button class="tab on" id="ptab-project" data-ptab="project">Project</button>
-      <button class="tab" id="ptab-console" data-ptab="console">Console<span class="badge" id="errbadge" hidden>0</span></button>
-      <span class="sp"></span><button class="ibtn" id="proj-plus" aria-label="新建文件">+</button>
+      <button class="tab on" id="ptab-project" data-ptab="project" data-i18n="proj" data-tip>Project</button>
+      <button class="tab" id="ptab-console" data-ptab="console"><span data-i18n="console" data-tip>Console</span><span class="badge" id="errbadge" hidden>0</span></button>
+      <span class="sp"></span><button class="ibtn" id="proj-plus" data-i18n-aria="newAsset">+</button>
     </div>
     <div class="pb" id="proj-body"></div>
   </div>
 
   <div class="panel" id="p-insp">
-    <div class="ph"><b>Inspector</b></div>
+    <div class="ph"><b data-i18n="insp" data-tip>Inspector</b></div>
     <div class="pb" id="insp-body"></div>
   </div>
 </div>
 <div id="modal"></div>
 
+<script src="i18n.js"></script>
 <script src="chapters/ch0.js"></script>
 <script src="editor.js"></script>
 </body>
