@@ -72,8 +72,8 @@ const STEPS = [
          [{zh:'R：左右拖动，缩放方块',en:'R: drag left or right to scale it'},()=>G.S.flags.scaled],
          [{zh:'在检查器把数值改回：位置 0、0.5、0，旋转 0、0、0，缩放 1、1、1',en:'In the Inspector, set it back: Position 0, 0.5, 0, Rotation 0, 0, 0, Scale 1, 1, 1'},
           ()=>G.S.flags.moved&&G.S.flags.rotated&&G.S.flags.scaled&&!!G.P()&&G.near(G.P().pos,[0,.5,0])&&G.near(G.P().rot,[0,0,0])&&G.near(G.effScale(G.P()),[1,1,1])]],
-  hint:{zh:'这个模拟器没有撤销功能，所以玩够了直接在检查器里输入数字改回去。Q 是手形工具，左键拖动可以旋转视角。',
-        en:"This simulator has no undo, so when you're done, type the numbers back in the Inspector. Q is the Hand tool: left-drag to orbit the view."},
+  hint:{zh:'玩够了可以按 Ctrl+Z（Mac 是 Cmd+Z）一步步撤销，或者直接在检查器里输入数字改回去。Q 是手形工具，左键拖动可以旋转视角。',
+        en:"When you're done, press Ctrl+Z (Cmd+Z on Mac) to undo step by step, or type the numbers back in the Inspector. Q is the Hand tool: left-drag to orbit the view."},
   auto:()=>{const p=G.P();Object.assign(G.S.flags,{moved:true,rotated:true,scaled:true});if(p){p.pos=[0,.5,0];p.rot=[0,0,0];p.scale=[1,1,1];}}},
 
  {title:{zh:'做地板', en:'Make a floor'},glow:()=>['#p-hier'],
@@ -151,21 +151,27 @@ const STEPS = [
     if(!s){const w=G.S.assets.find(a=>a.type==='script');
       if(w){const r=h.reach(w);if(r.nav)return r;return h.isSel(w)?{at:h.field('aname'),label:{zh:'改成 PlayerMove，按 Enter',en:'Rename to PlayerMove, press Enter'}}:{at:r.at,label:{zh:'点选这个脚本',en:'Select this script'}};}
       return viaMenu('#proj-plus',['create','script'],{zh:'点 +，选 创建 → MonoBehaviour 脚本',en:'Click +, then Create → MonoBehaviour Script'});}
+    if(G.codeOpen()===s.id){
+      const bad=SCRIPT.blanks.find(b=>G.codeDraft(b.id)===''||(s.comp&&s.comp.errs.some(e=>e.b===b.id)&&G.codeDraft(b.id)===String(s.blanks[b.id]||'')));
+      if(bad)return {at:`#modal .blank[data-b="${bad.id}"]`,label:bad.tip};
+      if(G.codeDirty())return {at:'#csave',label:G.t('hSaveCode')};
+      if(!(s.comp&&s.comp.ok))return {at:'#csave',label:G.t('hSaveCode')};
+      return null;}
     const r=h.reach(s);if(r.nav)return r;
-    if(!G.S.flags.viewed)return {at:r.at,label:{zh:'双击打开代码',en:'Double-click to open the code'}};
+    if(!(s.comp&&s.comp.ok))return {at:r.at,label:{zh:'双击打开代码',en:'Double-click to open the code'}};
     const p=G.P();if(p&&!p.scripts.some(x=>x.asset===s.id))return {from:r.at,to:h.row(p.id),label:{zh:'拖到 Player 上',en:'Drag onto Player'}};
     return null;},
-  body:{zh:'<b>脚本</b>是写给物体的指令。新建一个脚本，看一眼里面的代码，再把它拖到 Player 身上。',
-        en:'A <b>script</b> is a set of instructions for an object. Create one, take a look at the code, then drag it onto Player.'},
+  body:{zh:'<b>脚本</b>是写给物体的指令。新建一个脚本，打开它，把代码里空着的地方填好，再把它拖到 Player 身上。',
+        en:"A <b>script</b> is a set of instructions for an object. Create one, open it, fill in the blanks in the code, then drag it onto Player."},
   conds:[[{zh:'新建脚本，名字必须是 PlayerMove（和代码里的 class 名字一致）',en:'Create a script named exactly PlayerMove (it must match the class name in the code)'},()=>G.S.assets.some(a=>a.type==='script'&&a.name==='PlayerMove')],
-         [{zh:'双击脚本，打开代码看一眼（点每一行有解释）',en:'Double-click the script to open the code (click any line for an explanation)'},()=>G.S.flags.viewed],
+         [{zh:'双击打开，把代码里的 4 个空填好，按「保存」，控制台没有红字',en:'Double-click it, fill in the 4 blanks, press Save, and get no red errors in the Console'},()=>G.S.assets.some(a=>a.type==='script'&&a.name==='PlayerMove'&&a.comp&&a.comp.ok)],
          [{zh:'把脚本拖到层级里的 Player 上',en:'Drag the script onto Player in the Hierarchy'},()=>{const p=G.P();return !!p&&p.scripts.some(s=>(G.asset(s.asset)||{}).name==='PlayerMove');}]],
-  hint:{zh:'项目空白处右键 → 创建 → MonoBehaviour 脚本。建议先建一个 Scripts 文件夹。故意把名字打错，再拖到 Player 上，看看控制台会说什么。',
-        en:'Right-click in Project → Create → MonoBehaviour Script. A Scripts folder keeps things tidy. Try misspelling the name on purpose, drag it onto Player, and see what the Console says.'},
+  hint:{zh:'每个空格都有提示。填错了没关系：保存后控制台会出现红字，点红字会跳到出错的那一行。点代码的任意一行，会告诉你这行在做什么。',
+        en:"Every blank has a tip. Mistakes are fine: after saving, the Console shows red errors, and clicking one jumps to that line. Click any line of code to see what it does."},
   note:{zh:'真实 Unity 里，名字必须和 class 一模一样，包括大小写，否则脚本挂不上去，这是新手最常见的错误之一。',
         en:"In real Unity the file name must match the class name exactly, including upper and lower case. Otherwise the script won't attach — one of the most common beginner mistakes."},
   auto:()=>{let a=G.S.assets.find(x=>x.type==='script'&&x.name==='PlayerMove');if(!a){const f=G.S.assets.find(x=>x.type==='folder'&&x.name==='Scripts')||G.mkAsset('folder','Scripts',0);a=G.mkAsset('script','PlayerMove',f.id);}
-      G.S.flags.viewed=true;const p=G.P();if(p&&!p.scripts.some(s=>s.asset===a.id))G.addScript(p,a);}},
+      G.closeCode();a.blanks=Object.assign({},SCRIPT.answers);G.compileScript(a);G.S.flags.viewed=true;const p=G.P();if(p&&!p.scripts.some(s=>s.asset===a.id))G.addScript(p,a);}},
 
  {title:{zh:'调整摄像机', en:'Adjust the camera'},glow:()=>['#p-insp'],
   point:()=>{const c=cam();if(!c)return null;return selFirst(c)||fix('pos',[0,8,-8],c.pos)||fix('rot',[45,0,0],c.rot);},
@@ -230,32 +236,71 @@ const FINISH={
 <div class="note">Next: a horror game. A dark corridor, a flashlight, footsteps, and a monster that chases you. (This prototype only has Chapter 0 so far.)</div>
 <div class="gact"><button class="btn primary" data-act="reset">Play again</button><button class="btn" data-act="home">Back to home</button></div></div>`};
 
-const CODE=[
-['using UnityEngine;',{zh:'引入 Unity 的工具箱。没有它，Vector3、Time 这些词都不认识。',en:"Brings in Unity's toolbox. Without it, words like Vector3 and Time mean nothing."}],
-['using UnityEngine.InputSystem;',{zh:'引入新版输入系统，用来读键盘。Unity 6 的新项目默认只用它。',en:'Brings in the new Input System to read the keyboard. New Unity 6 projects use only this by default.'}],
-['',''],
-['public class PlayerMove : MonoBehaviour',{zh:'宣布这是一个脚本，名字叫 PlayerMove。名字必须和文件名一致。继承 MonoBehaviour，才能挂到物体上。',en:'Declares a script called PlayerMove. The name must match the file name. Inheriting from MonoBehaviour lets it attach to objects.'}],
-['{',{zh:'大括号成对出现，里面是这个脚本的全部内容。',en:'Braces come in pairs. Everything in this script goes inside.'}],
-['    public float speed = 5f;',{zh:'速度变量。public 让它出现在 Inspector 里，不改代码就能调。',en:'A speed variable. public makes it show up in the Inspector, so you can tweak it without editing code.'}],
-['',''],
-['    void Update()',{zh:'每一帧都会执行一次。画面每刷新一次，这里面的代码就跑一遍。',en:'Runs once per frame. Every time the screen refreshes, the code inside runs.'}],
-['    {',{zh:'Update 的开始。',en:'Start of Update.'}],
-['        Keyboard keyboard = Keyboard.current;',{zh:'取得当前连接的键盘。',en:"Gets the keyboard that's connected right now."}],
-['        if (keyboard == null) return;',{zh:'没有键盘就直接结束，避免报错。',en:'No keyboard? Stop here to avoid an error.'}],
-['',''],
-['        float x = 0f;',{zh:'x 是左右方向的输入，先设成 0。',en:'x is the left/right input. Start at 0.'}],
-['        float z = 0f;',{zh:'z 是前后方向的输入，先设成 0。',en:'z is the forward/back input. Start at 0.'}],
-['',''],
-['        if (keyboard.aKey.isPressed) x -= 1f;',{zh:'按住 A：x 减 1，往左。',en:'Holding A: x minus 1, go left.'}],
-['        if (keyboard.dKey.isPressed) x += 1f;',{zh:'按住 D：x 加 1，往右。',en:'Holding D: x plus 1, go right.'}],
-['        if (keyboard.sKey.isPressed) z -= 1f;',{zh:'按住 S：z 减 1，往后。',en:'Holding S: z minus 1, go back.'}],
-['        if (keyboard.wKey.isPressed) z += 1f;',{zh:'按住 W：z 加 1，往前。',en:'Holding W: z plus 1, go forward.'}],
-['',''],
-['        Vector3 direction = new Vector3(x, 0f, z).normalized;',{zh:'把输入做成一个三维箭头，并把长度调成 1。这样同时按 W 和 D 斜着走，不会比直走更快。',en:"Turns the input into a 3D arrow and makes its length 1, so walking diagonally (W + D) isn't faster than walking straight."}],
-['        transform.Translate(direction * speed * Time.deltaTime, Space.World);',{zh:'把物体沿箭头方向移动一段距离。乘上 Time.deltaTime，电脑跑 30 帧还是 144 帧，实际速度都一样。',en:'Moves the object along that arrow. Multiplying by Time.deltaTime keeps the real speed the same at 30 or 144 frames per second.'}],
-['    }',{zh:'Update 的结束。',en:'End of Update.'}],
-['}',{zh:'脚本的结束。',en:'End of the script.'}]];
+// PlayerMove.cs：代码模板。每行 c 是片段（字符串或空格 {b}），x 是点这一行时的解释，
+// run 标记播放时这一行什么时候亮（start / update / move），key 是按住哪个键时亮。
+const B = id => ({b:id});
+const SCRIPT = {
+ name:'PlayerMove',
+ blanks:[
+  {id:'speed',w:4,tip:{zh:'填一个数字，例如 5f',en:'Type a number, e.g. 5f'}},
+  {id:'msg',w:14,tip:{zh:'随便写一句话，播放时会出现在控制台',en:'Any message — it shows in the Console when you press Play'}},
+  {id:'semi',w:1,tip:{zh:'每句 C# 都要用分号 ; 结尾',en:'Every C# statement ends with a semicolon ;'}},
+  {id:'dt',w:14,tip:{zh:'填 Time.deltaTime（注意大小写）',en:'Type Time.deltaTime (mind the capitals)'}}],
+ answers:{speed:'5f',msg:'Hello, world!',semi:';',dt:'Time.deltaTime'},
+ lines:[
+  {c:['using UnityEngine;'],x:{zh:'引入 Unity 的工具箱。没有它，Vector3、Time 这些词都不认识。',en:"Brings in Unity's toolbox. Without it, words like Vector3 and Time mean nothing."}},
+  {c:['using UnityEngine.InputSystem;'],x:{zh:'引入新版输入系统，用来读键盘。Unity 6 的新项目默认只用它。',en:'Brings in the new Input System to read the keyboard. New Unity 6 projects use only this by default.'}},
+  {c:['']},
+  {c:['public class PlayerMove : MonoBehaviour'],x:{zh:'宣布这是一个脚本，名字叫 PlayerMove。名字必须和文件名一致。继承 MonoBehaviour，才能挂到物体上。',en:'Declares a script called PlayerMove. The name must match the file name. Inheriting from MonoBehaviour lets it attach to objects.'}},
+  {c:['{'],x:{zh:'大括号成对出现，里面是这个脚本的全部内容。',en:'Braces come in pairs. Everything in this script goes inside.'}},
+  {c:['    public float speed = ',B('speed'),';'],x:{zh:'速度变量。public 让它出现在检查器里，不改代码就能调。C# 里带小数点的数字后面要加 f，例如 5.5f。',en:'A speed variable. public makes it show up in the Inspector, so you can tweak it without editing code. In C#, a number with a decimal point needs an f at the end, like 5.5f.'}},
+  {c:['']},
+  {c:['    void Start()'],run:'start',x:{zh:'开始播放时执行一次。',en:'Runs once, when Play starts.'}},
+  {c:['    {'],run:'start',x:{zh:'Start 的开始。',en:'Start of Start.'}},
+  {c:['        Debug.Log("',B('msg'),'");'],run:'start',x:{zh:'把引号里的话打印到控制台。用来确认代码有没有跑到这里。',en:'Prints the text in quotes to the Console. Handy for checking that the code got here.'}},
+  {c:['    }'],run:'start',x:{zh:'Start 的结束。',en:'End of Start.'}},
+  {c:['']},
+  {c:['    void Update()'],run:'update',x:{zh:'每一帧都会执行一次。画面每刷新一次，这里面的代码就跑一遍。',en:'Runs once per frame. Every time the screen refreshes, the code inside runs.'}},
+  {c:['    {'],run:'update',x:{zh:'Update 的开始。',en:'Start of Update.'}},
+  {c:['        Keyboard keyboard = Keyboard.current;'],run:'update',x:{zh:'取得当前连接的键盘。',en:"Gets the keyboard that's connected right now."}},
+  {c:['        if (keyboard == null) return;'],run:'update',x:{zh:'没有键盘就直接结束，避免报错。',en:'No keyboard? Stop here to avoid an error.'}},
+  {c:[''],run:'update'},
+  {c:['        float x = 0f',B('semi')],run:'update',x:{zh:'x 是左右方向的输入，先设成 0。每一句 C# 都要用分号结尾，就像中文句子用句号。',en:'x is the left/right input. Start at 0. Every C# statement ends with a semicolon, like a full stop at the end of a sentence.'}},
+  {c:['        float z = 0f;'],run:'update',x:{zh:'z 是前后方向的输入，先设成 0。',en:'z is the forward/back input. Start at 0.'}},
+  {c:[''],run:'update'},
+  {c:['        if (keyboard.aKey.isPressed) x -= 1f;'],run:'update',key:'KeyA',x:{zh:'按住 A：x 减 1，往左。',en:'Holding A: x minus 1, go left.'}},
+  {c:['        if (keyboard.dKey.isPressed) x += 1f;'],run:'update',key:'KeyD',x:{zh:'按住 D：x 加 1，往右。',en:'Holding D: x plus 1, go right.'}},
+  {c:['        if (keyboard.sKey.isPressed) z -= 1f;'],run:'update',key:'KeyS',x:{zh:'按住 S：z 减 1，往后。',en:'Holding S: z minus 1, go back.'}},
+  {c:['        if (keyboard.wKey.isPressed) z += 1f;'],run:'update',key:'KeyW',x:{zh:'按住 W：z 加 1，往前。',en:'Holding W: z plus 1, go forward.'}},
+  {c:[''],run:'update'},
+  {c:['        Vector3 direction = new Vector3(x, 0f, z).normalized;'],run:'update',x:{zh:'把输入做成一个三维箭头，并把长度调成 1。这样同时按 W 和 D 斜着走，不会比直走更快。',en:"Turns the input into a 3D arrow and makes its length 1, so walking diagonally (W + D) isn't faster than walking straight."}},
+  {c:['        transform.Translate(direction * speed * ',B('dt'),', Space.World);'],run:'move',x:{zh:'把物体沿箭头方向移动一段距离。乘上 Time.deltaTime，电脑跑 30 帧还是 144 帧，实际速度都一样。',en:'Moves the object along that arrow. Multiplying by Time.deltaTime keeps the real speed the same at 30 or 144 frames per second.'}},
+  {c:['    }'],run:'update',x:{zh:'Update 的结束。',en:'End of Update.'}},
+  {c:['}'],x:{zh:'脚本的结束。',en:'End of the script.'}}],
+ // 模拟 C# 编译器：只检查空格里填的东西，报和真 Unity 一样的错误代码。
+ // 返回 errors（b = 哪个空格）和 rt（运行时用到的值）。
+ compile(b){
+  const E=[],rt={speed:5,msg:'',dt:'dt'};
+  const v=k=>String(b[k]==null?'':b[k]).trim();
+  const s=v('speed');
+  if(!s)E.push({b:'speed',code:'CS1525',en:"Invalid expression term ';'",zh:'等号后面空着，要填一个数字。'});
+  else if(/^-?\d+(\.\d+)?[fF]$/.test(s)||/^-?\d+$/.test(s))rt.speed=parseFloat(s);
+  else if(/^-?(\d*\.\d+|\d+\.)$/.test(s))E.push({b:'speed',code:'CS0664',en:"Literal of type double cannot be implicitly converted to type 'float'; use an 'F' suffix to create a literal of this type",zh:'带小数点的数字后面要加 f，例如 5.5f。'});
+  else E.push({b:'speed',code:'CS0103',en:`The name '${s}' does not exist in the current context`,zh:`电脑不认识「${s}」这个词。这里要填一个数字。`});
+  const m=String(b.msg==null?'':b.msg);
+  if(m.includes('"'))E.push({b:'msg',code:'CS1010',en:'Newline in constant',zh:'双引号 " 会提前结束这句话。句子里不要再写双引号。'});else rt.msg=m;
+  if(v('semi')!==';')E.push({b:'semi',code:'CS1002',en:'; expected',zh:'这一句的末尾少了分号 ;'});
+  const d=v('dt');
+  if(d==='Time.deltaTime')rt.dt='dt';
+  else if(/^\d+(\.\d+)?[fF]?$/.test(d))rt.dt=parseFloat(d);
+  else if(!d)E.push({b:'dt',code:'CS1525',en:"Invalid expression term ','",zh:'这里空着。要填 Time.deltaTime。'});
+  else{const mm=/^([A-Za-z_]\w*)(?:\.(\w*))?$/.exec(d);
+    if(mm&&mm[1]!=='Time')E.push({b:'dt',code:'CS0103',en:`The name '${mm[1]}' does not exist in the current context`,zh:`电脑不认识「${mm[1]}」。C# 区分大小写：要写 Time，T 大写。`});
+    else if(mm)E.push({b:'dt',code:'CS0117',en:`'Time' does not contain a definition for '${mm[2]||''}'`,zh:`Time 里没有「${mm[2]||''}」。要写 deltaTime：d 小写，T 大写。`});
+    else E.push({b:'dt',code:'CS1525',en:`Invalid expression term '${d}'`,zh:'这里要填 Time.deltaTime。'});}
+  return {errors:E,rt};}
+};
 
 G.chapters = G.chapters || {};
-G.chapters.ch0 = {title:{zh:'Unity 入门', en:'Unity Basics'}, steps:STEPS, finish:FINISH, code:CODE};
+G.chapters.ch0 = {title:{zh:'Unity 入门', en:'Unity Basics'}, steps:STEPS, finish:FINISH, script:SCRIPT};
 })();

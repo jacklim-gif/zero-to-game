@@ -155,22 +155,22 @@ xvfb-run -a -s "-screen 0 1600x1000x24" npx electron --no-sandbox --disable-gpu 
 10. Particle System：火、灰尘、放置特效（3、4）
 
 **B. 编辑器操作**
-11. 撤销 / 重做（Ctrl+Z / Ctrl+Shift+Z）（全部）
-12. 父子关系：在 Hierarchy 把物体拖到另一个物体下（摄像机挂玩家、手电筒挂摄像机）（1）
-13. 复制（Ctrl+D）、复制粘贴（1、2）
-14. 更多物体：Sphere、Capsule、Cylinder、Quad、Empty GameObject（全部）
+11. 撤销 / 重做（Ctrl+Z / Ctrl+Shift+Z）（全部）— 已完成
+12. 父子关系：在 Hierarchy 把物体拖到另一个物体下（摄像机挂玩家、手电筒挂摄像机）（1）— 已完成（拖到物体上变子物体，拖到空白处取消；保持世界位置）
+13. 复制（Ctrl+D）、复制粘贴（1、2）— 已完成
+14. 更多物体：Sphere、Capsule、Cylinder、Quad、Empty GameObject（全部）— 已完成
 15. 网格吸附（拖动时按住 Ctrl）（1、3）
 16. Tags 和 Layers：触发器判断「碰到的是不是 Player」（1、2）
-17. 多选（Shift / Cmd 点选）（全部）
+17. 多选（Shift / Cmd 点选）（全部）— 已完成（层级里）
 18. Prefab 覆盖（Overrides：Apply / Revert）（1、3）
 19. Scene 里的辅助显示：灯光范围、Collider 线框、声音范围（1）
 
 **C. 写代码**
-20. 填空式代码编辑：模板留几个空让用户自己打（全部）
-21. 模拟编译错误：少分号、拼错字、大小写错，显示和真 Unity 一样的红字（全部）
+20. 填空式代码编辑：模板留几个空让用户自己打（全部）— 第 0 章已有（4 个空）
+21. 模拟编译错误：少分号、拼错字、大小写错，显示和真 Unity 一样的红字（全部）— 已完成（CS1002、CS0103、CS0117、CS0664 等）
 22. public 变量自动出现在 Inspector（全部）
-23. Debug.Log 和 Console：点报错能跳到对应那行代码（全部）
-24. 执行顺序可视化：Play 时 Start、Update、OnTriggerEnter 被调用的那一刻代码亮一下（全部）
+23. Debug.Log 和 Console：点报错能跳到对应那行代码（全部）— 已完成
+24. 执行顺序可视化：Play 时 Start、Update、OnTriggerEnter 被调用的那一刻代码亮一下（全部）— 已完成（Start、Update、按键行；OnTriggerEnter 等第 1 章）
 
 **D. 美化（发起人说最难的部分）**
 25. Lighting 窗口：天空盒、环境光颜色、雾 ⚠（1、2、4）
@@ -191,10 +191,10 @@ xvfb-run -a -s "-screen 0 1600x1000x24" npx electron --no-sandbox --disable-gpu 
 38. Raycast 可视化：从摄像机射出的线，显示打中了什么（1、3）
 
 **F. 教练和学习体验**
-39. 每章进度保存：关掉 app 再打开，从同一步继续（全部）
+39. 每章进度保存：关掉 app 再打开，从同一步继续（全部）— 已完成（localStorage `ztg.ch0.save`）
 40. 提示分级：先轻轻提示，再指出位置，最后才「帮我做」（全部）— 箭头提示已有，还没分级
 41. 找 Bug 挑战：给一个坏掉的场景（材质粉红、画面全黑、AI 不动）让用户修好（每章末尾）
-42. 术语悬停解释：鼠标停在 Prefab、Collider 上弹出一句话解释（全部）
+42. 术语悬停解释：鼠标停在 Prefab、Collider 上弹出一句话解释（全部）— 已完成（术语表在 i18n.js 的 TERMS）
 43. 章末小测验（每章）
 44. 自由模式：关掉教练自己随便做（学完后）
 45. 导出到真 Unity：把用户写的脚本导出成 .cs，加一张「在真 Unity 里怎么做」的清单（每章）

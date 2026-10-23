@@ -8,7 +8,8 @@ const outDir = path.join(__dirname, '..', 'docs');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 app.whenReady().then(async () => {
-  const win = new BrowserWindow({ width: 1440, height: 900, show: true, webPreferences: { sandbox: true, backgroundThrottling: false } });
+  // 用内存里的临时存储：不受之前进度保存的影响，每次截图都从头开始
+  const win = new BrowserWindow({ width: 1440, height: 900, show: true, webPreferences: { sandbox: true, backgroundThrottling: false, partition: 'smoke-' + Date.now() } });
   const errors = [];
   win.webContents.on('console-message', (_e, level, msg) => { if (level >= 3) errors.push(msg); });
   await win.loadFile(path.join(__dirname, '..', 'app', 'index.html'));

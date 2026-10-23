@@ -154,9 +154,37 @@ button.chap .st.done{background:var(--ok);color:#fff}
 .cmsub .cmi{color:var(--fg)}
 .ghost{position:fixed;z-index:1000;pointer-events:none;background:var(--accent);color:var(--accent-fg);padding:3px 9px;border-radius:5px;font-size:12px;box-shadow:0 3px 10px rgba(0,0,0,.3)}
 .dropping{background:var(--sel)!important;outline:1px dashed var(--accent);outline-offset:-2px}
-#modal{position:fixed;inset:0;z-index:950;background:rgba(5,8,12,.55);display:none;align-items:center;justify-content:center;padding:16px}
+/* Code window floats over the editor without blocking it */
+#modal{position:fixed;inset:0;z-index:950;display:none;align-items:flex-start;justify-content:center;padding:60px 16px 16px;pointer-events:none}
 #modal.show{display:flex}
-.win{width:min(760px,100%);max-height:calc(100% - 20px);display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.win{pointer-events:auto;width:min(680px,100%);max-height:calc(100vh - 90px);display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:0 14px 44px rgba(0,0,0,.45)}
+.cph{cursor:move;text-transform:none;letter-spacing:0;font-size:12px;gap:8px}
+.cph b{font-family:var(--mono)}
+.cdirty{color:var(--warn)}
+.crun{color:var(--guide);font-family:var(--mono)}
+.cvs{color:var(--muted)}
+.csave{padding:2px 12px;font-size:12px}
+.blank{font:inherit;color:var(--fg);background:var(--tint);border:0;border-bottom:2px solid var(--guide);border-radius:3px 3px 0 0;padding:0 3px;margin:0 1px;outline:0;min-width:2ch}
+.blank:focus{background:var(--guide-bg);border-bottom-color:var(--accent)}
+.blank.err{border-bottom:2px wavy var(--err);background:rgba(239,108,108,.16)}
+.cl.bad .n{color:var(--err)!important;font-weight:600}
+.cl.run{background:rgba(90,149,234,.10)}
+.cl.hot{background:rgba(240,178,74,.38)}
+.cl{transition:background .12s}
+.errt{color:var(--err);font-family:var(--mono);font-size:12px}
+.okc{color:var(--ok)}.bad{color:var(--err)}
+.console .link{cursor:pointer}.console .link:hover{background:var(--panel2)}
+.console .why{color:var(--muted);font-family:var(--ui);padding-left:12px}
+.srcref{color:var(--muted);text-decoration:underline}
+/* Hierarchy tree, multi-select, term tooltip */
+.tw{flex:none;width:12px;text-align:center;color:var(--muted);font-size:10px;cursor:pointer}
+.multi{margin-top:6px;color:var(--muted);font-size:12px}
+.term{border-bottom:1px dotted currentColor;cursor:help}
+.term:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+#termtip{position:fixed;z-index:1100;max-width:300px;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,.35);pointer-events:none}
+#termtip b{font-size:13px}
+#termtip .en{color:var(--muted);font-family:var(--mono);font-size:11px}
+#termtip div{margin-top:3px;color:var(--muted)}
 .code{flex:1;min-height:0;overflow:auto;background:var(--field);font-family:var(--mono);font-size:12.5px;padding:6px 0}
 .cl{display:flex;cursor:default;padding:0 12px 0 0;min-height:20px}
 .cl .n{flex:none;width:36px;text-align:right;color:var(--muted);padding-right:12px;user-select:none}
