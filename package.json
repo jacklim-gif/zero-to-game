@@ -1,8 +1,13 @@
 {
-  "name": "virtual-unity",
-  "productName": "Virtual Unity",
+  "name": "zero-to-game",
+  "productName": "Zero to Game",
   "version": "0.1.0",
-  "description": "虚拟 Unity 教室：在模拟的 Unity 编辑器里，跟着教练一步一步学做游戏。",
+  "description": "从零到游戏：在模拟的游戏编辑器里，跟着教练一步一步学做游戏。",
+  "homepage": "https://github.com/jacklim-gif/zero-to-game",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jacklim-gif/zero-to-game.git"
+  },
   "main": "main.js",
   "license": "MIT",
   "scripts": {
@@ -14,8 +19,8 @@
     "dist:linux": "electron-builder --linux --publish never"
   },
   "build": {
-    "appId": "io.github.virtualunity.app",
-    "productName": "Virtual Unity",
+    "appId": "io.github.jacklimgif.zerotogame",
+    "productName": "Zero to Game",
     "directories": {
       "output": "dist"
     },

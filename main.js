@@ -1,4 +1,4 @@
-// 虚拟 Unity 教室：桌面 app 入口
+// 从零到游戏（Zero to Game）：桌面 app 入口
 const { app, BrowserWindow, Menu, shell } = require('electron');
 const path = require('path');
 
@@ -8,7 +8,7 @@ function createWindow() {
     height: 900,
     minWidth: 1024,
     minHeight: 680,
-    title: '虚拟 Unity 教室',
+    title: '从零到游戏',
     backgroundColor: '#12151a',
     icon: path.join(__dirname, 'build', 'icon.png'),
     show: false,

@@ -1,4 +1,6 @@
-# 虚拟 Unity 教室：项目说明（给 Claude Code）
+# 从零到游戏 Zero to Game：项目说明（给 Claude Code）
+
+GitHub：https://github.com/jacklim-gif/zero-to-game
 
 ## 这个项目是什么
 
@@ -70,7 +72,7 @@ scripts/smoke.js      冒烟测试：打开 app，截主页和编辑器两张图
   - `auto()`：「帮我做这一步」，必须能从任何中间状态把这一步做完
   - `glow()`：返回要发亮的 CSS 选择器
   - `enter()`（可选）：进入这一步时执行
-- **主页**：`#home` 覆盖层，章节卡片。完成第 0 章会在 localStorage 写 `vu.ch0.done`（所有 localStorage 读写都包在 try/catch 里）。
+- **主页**：`#home` 覆盖层，章节卡片。完成第 0 章会在 localStorage 写 `ztg.ch0.done`（所有 localStorage 读写都包在 try/catch 里）。
 - **主题**：颜色全部是 CSS 变量，跟随系统亮/暗色。
 
 ## 怎么跑和怎么验证
@@ -98,7 +100,7 @@ xvfb-run -a -s "-screen 0 1600x1000x24" npx electron --no-sandbox --disable-gpu 
 - app 要能**完全离线**运行。不要依赖 CDN 加载脚本；需要库就放进项目里一起打包。（目前 Google Fonts 是唯一的网络请求，断网时会退回系统字体，这是可以接受的。）
 - Electron 安全设置保持：`contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。需要和系统交互时用 preload + IPC，不要打开 nodeIntegration。
 - 不要用 `alert` / `confirm` / `prompt`，确认步骤做在界面里。
-- **商标**：名字里含「Unity」只适合内部练习。公开发布前要和发起人确认改名。不要使用 Unity 的 logo 或任何官方视觉素材，界面只做「风格接近」，不做像素级复制。README 和主页要保留「本项目与 Unity Technologies 没有关联」。
+- **商标**：项目名是「从零到游戏 / Zero to Game」，不要在 app 名字、图标、标题里用「Unity」。界面里提到 Unity 是为了说明教的是什么，这没问题。不要使用 Unity 的 logo 或任何官方视觉素材，界面只做「风格接近」，不做像素级复制。README 和主页要保留「本项目与 Unity Technologies 没有关联」。
 - 提交信息用约定式格式（`feat:`、`fix:`、`docs:` 等）。
 
 ## 已知限制
@@ -118,4 +120,4 @@ xvfb-run -a -s "-screen 0 1600x1000x24" npx electron --no-sandbox --disable-gpu 
 5. **写第 1 章：恐怖游戏**。先列出步骤大纲给发起人确认，再实现。美化环节要有「灰盒 → 加材质 → 加灯光 → 加后期」的前后对比。
 6. 发布到 GitHub，推 `v0.1.0` tag，确认 Actions 产出三个平台的安装包。
 
-做任何会改变课程内容或方向的决定（章节顺序、步骤内容、换渲染技术、改名）之前，先问发起人。
+做任何会改变课程内容或方向的决定（章节顺序、步骤内容、换渲染技术）之前，先问发起人。

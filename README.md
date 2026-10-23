@@ -1,6 +1,6 @@
-# 虚拟 Unity 教室
+# 从零到游戏 Zero to Game
 
-在一个模拟的 Unity 编辑器里，跟着教练一步一步学做游戏。给完全没做过游戏的新手。
+在一个模拟的游戏编辑器里（界面仿照 Unity），跟着教练一步一步学做游戏。给完全没做过游戏的新手。
 
 不用先装 Unity，也不会把项目弄坏。打开 app，选一章，界面左边的教练会告诉你下一步点哪里、拖什么、改哪个数字。做对了，清单会自动打勾。
 
@@ -16,9 +16,9 @@
 
 | 系统 | 下载哪个 |
 | --- | --- |
-| Windows | `Virtual Unity Setup x.x.x.exe`（安装版），或 `Virtual Unity x.x.x.exe`（免安装，双击直接开） |
-| macOS | `Virtual Unity-x.x.x.dmg` |
-| Linux | `Virtual Unity-x.x.x.AppImage` |
+| Windows | `Zero to Game Setup x.x.x.exe`（安装版），或 `Zero to Game x.x.x.exe`（免安装，双击直接开） |
+| macOS | `Zero to Game-x.x.x.dmg` |
+| Linux | `Zero to Game-x.x.x.AppImage` |
 
 Windows 第一次打开时，如果出现「Windows 已保护你的电脑」，点「更多信息」，再点「仍要运行」。这是因为安装包没有付费签名，不是病毒。macOS 同理：右键点 app，选「打开」。
 

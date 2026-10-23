@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:">
-<title>虚拟 Unity 教室</title>
+<title>从零到游戏</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -187,7 +187,7 @@ button.chap .st.done{background:var(--ok);color:#fff}
   <div class="home-in">
     <div class="home-head">
       <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect x="2" y="2" width="60" height="60" rx="14" fill="#1c2027"/><path d="M32 12 49 22 32 32 15 22z" fill="#ffaa5a"/><path d="M15 22 32 32v20L15 42z" fill="#ff8a1f"/><path d="M49 22 32 32v20l17-10z" fill="#c4620e"/></svg>
-      <div><h1>虚拟 Unity 教室</h1><p>在一个模拟的 Unity 编辑器里，跟着教练一步一步做出你的第一个游戏。不用安装 Unity，做错了也不会弄坏任何东西。</p></div>
+      <div><h1>从零到游戏</h1><p>在一个模拟的 Unity 编辑器里，跟着教练一步一步做出你的第一个游戏。不用安装 Unity，做错了也不会弄坏任何东西。</p></div>
     </div>
     <div class="chapters">
       <button class="chap" id="chap0"><span class="cn">第 0 章</span><b>Unity 入门</b><span class="d">认识界面，做一个能用 WASD 走动的方块。12 步，约 30 分钟。</span><span class="st" id="chap0st">开始</span></button>
@@ -202,7 +202,7 @@ button.chap .st.done{background:var(--ok);color:#fff}
 
 <div class="app" id="app">
   <div class="panel" id="p-top">
-    <span class="brand">虚拟 Unity</span>
+    <span class="brand">Zero to Game</span>
     <button class="mbtn" data-menu="file" id="menu-file">File</button>
     <button class="mbtn" data-menu="edit">Edit</button>
     <button class="mbtn" data-menu="go">GameObject</button>
@@ -763,7 +763,7 @@ function stopPlay(){if(!S.playing)return;const [objs,prefabs]=JSON.parse(S.snap)
 $('#playbtn').addEventListener('click',()=>S.playing?stopPlay():startPlay());
 $('#pausebtn').addEventListener('click',()=>{if(!S.playing)return;S.paused=!S.paused;commit();});
 function reset(){closeMenu();closeCode();init();commit();}
-const DONE_KEY='vu.ch0.done';
+const DONE_KEY='ztg.ch0.done';
 function readDone(){try{return localStorage.getItem(DONE_KEY)==='1';}catch(e){return false;}}
 function markDone(){try{localStorage.setItem(DONE_KEY,'1');}catch(e){}}
 function showHome(){if(S.playing)stopPlay();closeMenu();closeCode();const st=$('#chap0st');const d=readDone();st.textContent=d?'已完成 · 再玩一遍':(S.step>0?'继续（步骤 '+(S.step+1)+'）':'开始');st.classList.toggle('done',d);$('#home').hidden=false;}
