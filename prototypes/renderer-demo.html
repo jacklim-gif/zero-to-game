@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:">
+<title>渲染器技术验证 · Renderer demo</title>
+<style>
+:root{--bg:#05070a;--panel:rgba(18,21,26,.86);--line:#363d49;--fg:#e5e8ed;--muted:#9aa3af;--accent:#f0b24a}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:13px/1.5 "PingFang SC","Microsoft YaHei",system-ui,sans-serif;overflow:hidden;user-select:none}
+canvas{display:block;width:100%;height:100%;cursor:grab}
+canvas:active{cursor:grabbing}
+.panel{position:fixed;top:12px;left:12px;width:280px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;backdrop-filter:blur(6px)}
+.panel h1{margin:0 0 2px;font-size:15px}
+.panel p{margin:0 0 10px;color:var(--muted);font-size:12px}
+.panel label{display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer}
+.panel label small{color:var(--muted)}
+.panel input[type=range]{width:100%}
+.row{margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+.fps{color:var(--muted);font-family:ui-monospace,Menlo,monospace;font-size:11px;margin-top:8px}
+.split{position:fixed;top:0;bottom:0;width:2px;background:var(--accent);box-shadow:0 0 8px rgba(240,178,74,.6);pointer-events:none}
+.tag{position:fixed;bottom:16px;padding:4px 10px;border-radius:6px;background:var(--panel);border:1px solid var(--line);font-size:12px;pointer-events:none}
+.tag.l{transform:translateX(calc(-100% - 10px))}.tag.r{transform:translateX(10px)}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="panel">
+  <h1>渲染器技术验证 <small style="color:var(--muted);font-weight:400">Renderer demo</small></h1>
+  <p>WASD 走动，按住鼠标拖动看四周。<br>Walk with WASD, drag the mouse to look around.</p>
+  <label><input type="checkbox" id="o-flash" checked> 手电筒 <small>Spot Light</small></label>
+  <label><input type="checkbox" id="o-bulb" checked> 闪烁的灯泡 <small>Point Light</small></label>
+  <label><input type="checkbox" id="o-fog" checked> 雾 <small>Fog</small></label>
+  <label><input type="checkbox" id="o-shadow" checked> 阴影 <small>Shadows</small></label>
+  <label><input type="checkbox" id="o-mat" checked> 材质（金属、发光、贴图） <small>Materials</small></label>
+  <label><input type="checkbox" id="o-post" checked> 后期处理 <small>Post-processing</small></label>
+  <div class="row">
+    <label style="cursor:default">前后对比 <small>Before / after</small></label>
+    <input type="range" id="o-split" min="0" max="100" value="0" aria-label="前后对比">
+  </div>
+  <div class="fps" id="fps"></div>
+</div>
+<div class="split" id="split" hidden></div>
+<div class="tag l" id="tagL" hidden>之前：灰盒 · Before: greybox</div>
+<div class="tag r" id="tagR" hidden>之后：美化 · After</div>
+<script src="../app/vendor/three.js"></script>
+<script src="renderer-demo.js"></script>
+</body>
+</html>

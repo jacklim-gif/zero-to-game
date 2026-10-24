@@ -133,6 +133,8 @@ xvfb-run -a -s "-screen 0 1600x1000x24" npx electron --no-sandbox --disable-gpu 
 2. **章节系统**：主页卡片从章节数据生成；每章可以有自己的初始场景；保存每章的进度（做到第几步、场景状态），重开 app 可以继续。
 3. **撤销**：至少支持 Ctrl+Z 撤销 Inspector 修改、创建、删除。
 4. **为第 1 章升级渲染器**：评估改用 Three.js（打包进项目，不走 CDN），需要能演示：点光源/聚光灯（手电筒）、雾、阴影、后期处理（Vignette、Film Grain、Color Adjustments）。先做一个最小的技术验证，和发起人确认效果后再写第 1 章。
+   - 技术验证已做（2026-10-24）：`npm run demo` 打开 `prototypes/renderer-demo.html`，恐怖走廊 + 手电筒 + 闪烁灯泡 + 雾 + 阴影 + 金属/发光/贴图材质 + 后期处理 + 前后对比滑块，60 FPS。**等发起人看过再把编辑器换过去。**
+   - Three.js r186 用 esbuild 打包成普通脚本 `app/vendor/three.js`（`window.THREE`，含 EffectComposer、RenderPass、UnrealBloomPass、ShaderPass、OutputPass）。入口 `scripts/three-entry.js`，改了跑 `npm run vendor`，打包结果要提交。r186 已没有 `PCFSoftShadowMap`，用 `PCFShadowMap`。
 5. **写第 1 章：恐怖游戏**。先列出步骤大纲给发起人确认，再实现。美化环节要有「灰盒 → 加材质 → 加灯光 → 加后期」的前后对比。
 6. 发布到 GitHub，推 `v0.1.0` tag，确认 Actions 产出三个平台的安装包。
 

@@ -13,6 +13,8 @@
   "scripts": {
     "start": "electron .",
     "smoke": "electron scripts/smoke.js",
+    "demo": "electron scripts/demo.js",
+    "vendor": "esbuild scripts/three-entry.js --bundle --minify --format=iife --legal-comments=eof --outfile=app/vendor/three.js",
     "dist": "electron-builder --publish never",
     "dist:win": "electron-builder --win --publish never",
     "dist:mac": "electron-builder --mac --publish never",
@@ -56,6 +58,8 @@
   },
   "devDependencies": {
     "electron": "33.2.1",
-    "electron-builder": "25.1.8"
+    "electron-builder": "25.1.8",
+    "esbuild": "0.28.2",
+    "three": "0.186.1"
   }
 }
