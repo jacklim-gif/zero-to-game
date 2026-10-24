@@ -74,7 +74,10 @@ app/index.html          页面结构
 app/styles.css          样式
 app/i18n.js             界面文字（中文 / English）
 app/chapters/ch0.js     第 0 章的教练步骤
+app/scripts.js          内置脚本模板：第一人称移动、怪物追人
+app/vendor/three.js     Three.js（3D 画面，已打包，不用上网）
 app/editor.js           虚拟编辑器：3D 视图、拖放、物理、教练提示
+prototypes/             渲染效果 demo（npm run demo）
 main.js                 桌面 app 入口（Electron）
 build/icon.png          app 图标
 scripts/smoke.js        冒烟测试：打开 app 截图，npm run smoke

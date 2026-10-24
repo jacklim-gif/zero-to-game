@@ -240,7 +240,8 @@ const FINISH={
 // run 标记播放时这一行什么时候亮（start / update / move），key 是按住哪个键时亮。
 const B = id => ({b:id});
 const SCRIPT = {
- name:'PlayerMove',
+ name:'PlayerMove', kind:'translate',
+ fields:[{id:'speed',label:'Speed',type:'float',def:5}],
  blanks:[
   {id:'speed',w:4,tip:{zh:'填一个数字，例如 5f',en:'Type a number, e.g. 5f'}},
   {id:'msg',w:14,tip:{zh:'随便写一句话，播放时会出现在控制台',en:'Any message — it shows in the Console when you press Play'}},
