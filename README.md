@@ -59,6 +59,22 @@ npm run dist:linux   # Linux
 
 模拟器也会重现新手常犯的错：脚本名字和 class 不一致会在 Console 报红字；Play 模式下的修改停止后会还原；没加 Rigidbody 的方块走出地板会浮在空中；没保存的场景名字后面有 `*`。
 
+学完第 0 章之后：
+
+- **章末小测验**：6 道选择题，检查你记住了没有。
+- **找 Bug 挑战**：给你一个坏掉的场景（地板粉红、方块不会动、掉进无底洞、摄像机拍不到），自己找出 4 个问题修好。
+- **自由模式**：没有教练，自己随便做。
+- **导出到真 Unity**：把你写的脚本打包成 zip，里面附一张「在真 Unity 里怎么做」的清单。
+
+编辑器里还有：
+
+- **美化工具**：前后对比滑块（灰盒 vs 上色后）、调色盘（选一个主色，自动配色）、素材库（树、石头、木箱等 10 个装饰品）、摆放检查（提示「太整齐」「空角落」）、截图对比。
+- **游戏系统**：UI（文字、图片、滑条、按钮）、饥饿/口渴条、昼夜循环、存档读档（PlayerPrefs）、物品数据。
+- **其他**：撤销/重做、复制粘贴、父子关系、碰撞体、触发器、第一人称移动、怪物追人（NavMesh）。
+- **设置**（右上角齿轮）：语言、字体大小、提示方式、检查更新。按 `?` 看快捷键。
+
+提示是分级的：先只有发亮的边框；卡住了点「给我提示」看文字，再点「指给我看」才出现箭头和「帮我做这一步」。不想等可以在设置里改成一直显示箭头。
+
 ## 路线图
 
 - [x] 第 0 章：Unity 入门
@@ -73,12 +89,14 @@ npm run dist:linux   # Linux
 app/index.html          页面结构
 app/styles.css          样式
 app/i18n.js             界面文字（中文 / English）
-app/chapters/ch0.js     第 0 章的教练步骤
-app/scripts.js          内置脚本模板：第一人称移动、怪物追人
+app/chapters/ch0.js     第 0 章：教练步骤、找 Bug 挑战、小测验
+app/scripts.js          内置脚本模板：第一人称移动、怪物追人、生存数值、昼夜、存档、物品
+app/props.js            素材库的装饰品（用基本形状拼的，不用下载）
 app/vendor/three.js     Three.js（3D 画面，已打包，不用上网）
 app/editor.js           虚拟编辑器：3D 视图、拖放、物理、教练提示
 prototypes/             渲染效果 demo（npm run demo）
 main.js                 桌面 app 入口（Electron）
+preload.js              给页面用的少量桌面功能：版本号、字体大小、检查更新
 build/icon.png          app 图标
 scripts/smoke.js        冒烟测试：打开 app 截图，npm run smoke
 .github/workflows/      推送 v 开头的 tag 时自动打包三个系统的安装包

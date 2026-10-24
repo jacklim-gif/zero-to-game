@@ -230,11 +230,11 @@ const FINISH={
  zh:`<div class="finish"><div class="gstep">完成</div><h2>第 0 章完成：方块能走了</h2>
 <p>你认识了五个窗口，做了方块、地板、材质、预制件和第一段 C#，还学会了播放、刚体和保存。</p>
 <div class="note">下一章：恐怖游戏。黑暗走廊、手电筒、脚步声和一个会追你的怪物。（这个原型暂时只有第 0 章）</div>
-<div class="gact"><button class="btn primary" data-act="reset">再玩一遍</button><button class="btn" data-act="home">回到主页</button></div></div>`,
+<div class="gact"><button class="btn primary" data-act="quiz">章末小测验</button><button class="btn" data-act="export">导出到真 Unity</button><button class="btn" data-act="reset">再玩一遍</button><button class="btn quiet" data-act="home">回到主页</button></div></div>`,
  en:`<div class="finish"><div class="gstep">Done</div><h2>Chapter 0 complete: your cube can walk</h2>
 <p>You met the five windows, made a cube, a floor, materials, a Prefab and your first C# script, and learned Play, Rigidbody and saving.</p>
 <div class="note">Next: a horror game. A dark corridor, a flashlight, footsteps, and a monster that chases you. (This prototype only has Chapter 0 so far.)</div>
-<div class="gact"><button class="btn primary" data-act="reset">Play again</button><button class="btn" data-act="home">Back to home</button></div></div>`};
+<div class="gact"><button class="btn primary" data-act="quiz">Chapter quiz</button><button class="btn" data-act="export">Export to real Unity</button><button class="btn" data-act="reset">Play again</button><button class="btn quiet" data-act="home">Back to home</button></div></div>`};
 
 // PlayerMove.cs：代码模板。每行 c 是片段（字符串或空格 {b}），x 是点这一行时的解释，
 // run 标记播放时这一行什么时候亮（start / update / move），key 是按住哪个键时亮。
@@ -302,6 +302,55 @@ const SCRIPT = {
   return {errors:E,rt};}
 };
 
+// 找 Bug 挑战：一个坏掉的场景，4 个问题。setup 建场景，check 判断修好了没有。
+const P_ = () => G.P(), F_ = () => G.FL();
+const BUGS = {
+ setup:()=>{
+  const fm=G.mkAsset('material','Floor_Mat',0,{color:'#4a4d52',shader:'Standard'}),pm=G.mkAsset('material','Player_Mat',0,{color:'#ff8a1f'});
+  const f=G.mkObj('plane','Floor',[0,0,0],[3,1,3]);f.mat=fm.id;f.col=null;
+  const p=G.mkObj('cube','Player',[0,.5,0]);p.mat=pm.id;p.rb={useGravity:true,isKinematic:false,seq:900};
+  const s=G.mkAsset('script','PlayerMove',0);s.blanks=Object.assign({},SCRIPT.answers);G.compileScript(s);G.addScript(p,s);p.scripts[0].vals.speed=0;
+  const c=G.S.objs.find(o=>o.type==='camera');c.pos=[0,8,-8];c.rot=[45,180,0];},
+ list:[
+  {title:{zh:'地板是粉红色的',en:'The floor is bright pink'},
+   hint:{zh:'粉红色 = 材质的着色器和渲染管线不匹配。选中地板用的材质，在检查器把「着色器」改成 URP/Lit。',en:"Pink means the material's shader doesn't match the render pipeline. Select the floor's material and set Shader to URP/Lit in the Inspector."},
+   check:()=>G.S.objs.every(o=>{const m=G.matOf(o);return !m||(m.shader||'URP/Lit')!=='Standard';})},
+  {title:{zh:'游戏画面里看不到玩家',en:"The Game view doesn't show the player"},
+   hint:{zh:'游戏画面是主摄像机拍的。选中主摄像机，看看它的旋转 Y：是不是转到背后去了？',en:'The Game view is what the Main Camera sees. Select it and look at Rotation Y — is it facing backwards?'},
+   check:()=>!!P_()&&G.inCameraView(P_())},
+  {title:{zh:'一按播放，方块就穿过地板掉下去',en:'Press Play and the cube falls through the floor'},
+   hint:{zh:'方块有刚体会掉，那地板为什么接不住？选中地板，看看它有没有碰撞体。没有的话：添加组件 → 物理 → 网格碰撞体。',en:"The cube has a Rigidbody so it falls — but why doesn't the floor catch it? Select the floor and check for a collider. If there is none: Add Component → Physics → Mesh Collider."},
+   check:()=>!!F_()&&!!F_().col&&!F_().col.trigger},
+  {title:{zh:'按 W A S D，方块不会动',en:"W A S D doesn't move the cube"},
+   hint:{zh:'脚本挂上了，也打勾了，那就看看它的数值。选中 Player，看 Player Move 的 Speed。',en:"The script is attached and enabled, so check its values. Select Player and look at Player Move's Speed."},
+   check:()=>{const p=P_();return !!p&&p.scripts.some(s=>s.enabled&&s.vals&&s.vals.speed>0);}}]};
+
+// 章末小测验
+const QUIZ=[
+ {q:{zh:'想改一个物体的位置、旋转、缩放，要去哪个窗口？',en:"Which window do you use to change an object's position, rotation and scale?"},
+  o:[{zh:'层级',en:'Hierarchy'},{zh:'检查器',en:'Inspector'},{zh:'项目',en:'Project'},{zh:'控制台',en:'Console'}],a:1,
+  w:{zh:'检查器显示选中物体的所有组件，变换（Transform）就在最上面。',en:'The Inspector shows every component of the selection, with Transform at the top.'}},
+ {q:{zh:'在播放模式下把 Speed 改成 10，停止播放后会怎样？',en:'You change Speed to 10 during Play. What happens when you stop?'},
+  o:[{zh:'保留 10',en:'It stays 10'},{zh:'变回原来的值',en:'It goes back to the old value'},{zh:'控制台报错',en:'The Console shows an error'},{zh:'物体被删掉',en:'The object is deleted'}],a:1,
+  w:{zh:'播放模式下的修改，停止后都会还原。要改，就在停止状态下改。',en:'Changes made in Play mode are undone when you stop. Edit while stopped.'}},
+ {q:{zh:'脚本文件叫 Move.cs，代码里写的是 public class PlayerMove，会怎样？',en:'The file is Move.cs but the code says public class PlayerMove. What happens?'},
+  o:[{zh:'正常运行',en:'It works fine'},{zh:'Unity 自动改名',en:'Unity renames it for you'},{zh:'挂不到物体上，控制台报错',en:"It won't attach and the Console shows an error"},{zh:'只能在播放时用',en:'It only works during Play'}],a:2,
+  w:{zh:'文件名必须和 class 名一模一样，包括大小写。',en:'The file name must match the class name exactly, including upper and lower case.'}},
+ {q:{zh:'预制件（Prefab）最大的好处是什么？',en:'What is the main benefit of a Prefab?'},
+  o:[{zh:'画面更好看',en:'It looks better'},{zh:'改一次模板，所有副本一起变',en:'Change the template once and every copy updates'},{zh:'游戏跑得更快',en:'The game runs faster'},{zh:'可以自动保存',en:'It saves automatically'}],a:1,
+  w:{zh:'怪物、树、物品这些要用很多次的东西，都做成预制件。',en:'Monsters, trees, items — anything you use many times becomes a Prefab.'}},
+ {q:{zh:'要让方块受重力掉下去，需要加哪个组件？',en:'Which component makes a cube fall with gravity?'},
+  o:[{zh:'盒状碰撞体',en:'Box Collider'},{zh:'网格渲染器',en:'Mesh Renderer'},{zh:'刚体',en:'Rigidbody'},{zh:'摄像机',en:'Camera'}],a:2,
+  w:{zh:'刚体负责重力；碰撞体负责「碰到」，两个都要，方块才会落在地板上。',en:'The Rigidbody handles gravity; colliders handle touching. You need both for the cube to land on the floor.'}},
+ {q:{zh:'为什么移动的时候要乘上 Time.deltaTime？',en:'Why multiply movement by Time.deltaTime?'},
+  o:[{zh:'让代码更短',en:'To make the code shorter'},{zh:'让快的电脑和慢的电脑速度一样',en:'So the speed is the same on fast and slow computers'},{zh:'让物体变大',en:'To make the object bigger'},{zh:'Unity 规定的，没有原因',en:"Unity requires it for no reason"}],a:1,
+  w:{zh:'Update 每一帧跑一次，帧数越高跑越多次。乘上每帧的秒数，就变成「每秒移动多少」。',en:'Update runs every frame, so faster computers run it more often. Multiplying by the seconds per frame turns it into “per second”.'}}];
+
+// 导出到真 Unity 时附带的「怎么做」清单的开头（场景内容由引擎根据当前场景生成）
+const EXPORT_INTRO={
+ zh:'# 在真 Unity 里重做这个场景\n\n1. 用 Unity Hub 安装 Unity 6.3 LTS，新建项目，模板选 **Universal 3D**。\n2. 把这个压缩包里的 `Assets/Scripts` 文件夹拖进 Unity 的项目窗口。\n3. 照下面的清单，一个一个建出物体和材质。\n',
+ en:'# Rebuild this scene in real Unity\n\n1. Install Unity 6.3 LTS with Unity Hub and create a project with the **Universal 3D** template.\n2. Drag the `Assets/Scripts` folder from this zip into Unity’s Project window.\n3. Follow the list below to create each object and material.\n'};
+
 G.chapters = G.chapters || {};
-G.chapters.ch0 = {title:{zh:'Unity 入门', en:'Unity Basics'}, steps:STEPS, finish:FINISH, script:SCRIPT};
+G.chapters.ch0 = {title:{zh:'Unity 入门', en:'Unity Basics'}, steps:STEPS, finish:FINISH, script:SCRIPT, bugs:BUGS, quiz:QUIZ, exportIntro:EXPORT_INTRO};
 })();

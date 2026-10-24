@@ -54,11 +54,13 @@ GitHub：https://github.com/jacklim-gif/zero-to-game
 app/index.html        页面结构（固定文字用 data-i18n 标记，由 JS 填入当前语言）
 app/styles.css        全部样式
 app/i18n.js           界面文字（中文 / English）和 ZTG.t() / ZTG.L()，最先加载
-app/chapters/ch0.js   第 0 章内容：STEPS、完成页、代码讲解，文字都写成 {zh, en}
+app/chapters/ch0.js   第 0 章内容：STEPS、完成页、代码讲解、找 Bug 挑战（BUGS）、章末小测验（QUIZ）、导出说明，文字都写成 {zh, en}
 app/vendor/three.js   Three.js r186（esbuild 打包的普通脚本，window.THREE），离线可用
-app/scripts.js        内置 C# 脚本模板：FirstPersonMove、EnemyChase（PlayerMove 在 ch0.js）
-app/editor.js         编辑器核心：状态、Three.js 渲染、交互、物理、脚本执行、NavMesh、教练提示层，最后加载
-main.js               Electron 入口：无菜单栏，sandbox + contextIsolation，外链用系统浏览器打开
+app/scripts.js        内置 C# 脚本模板：FirstPersonMove、EnemyChase、SurvivalStats、DayNightCycle、SaveLoad、ItemData、Inventory（PlayerMove 在 ch0.js）
+app/props.js          素材库：10 个用基本形状拼出来的低多边形装饰品（树、石头、木箱……），不用下载，CC0
+app/editor.js         编辑器核心：状态、Three.js 渲染、交互、物理、脚本执行、NavMesh、UI、美化工具、教练提示层，最后加载
+main.js               Electron 入口：无菜单栏，sandbox + contextIsolation，外链用系统浏览器打开；IPC：版本号、字体缩放、检查更新
+preload.js            用 contextBridge 暴露 window.ztgApp（info / checkUpdate / openRelease / setZoom），不开放 Node
 build/icon.png        app 图标（1024×1024，electron-builder 会转换成各平台格式）
 scripts/smoke.js      冒烟测试：打开 app，截主页和编辑器两张图到 docs/，console 有 error 就失败
 .github/workflows/build.yml  推送 v* tag 时在 Windows/macOS/Linux 打包并发布到 Releases
@@ -66,17 +68,25 @@ scripts/smoke.js      冒烟测试：打开 app，截主页和编辑器两张图
 
 ### 关键部分
 
-三个脚本按 `i18n.js` → `chapters/ch0.js` → `editor.js` 的顺序加载（普通 `<script>`，不用 ES module：`file://` 下 module 容易被 CORS 挡）。它们通过全局命名空间 `window.ZTG` 互相访问：`editor.js` 把 `S`（getter）、`mkObj`、`select`、`P`、`FL` 等挂到 `ZTG` 上，章节文件里的函数用 `G.xxx` 在调用时读取。
+脚本按 `i18n.js` → `vendor/three.js` → `scripts.js` → `props.js` → `chapters/ch0.js` → `editor.js` 的顺序加载（普通 `<script>`，不用 ES module：`file://` 下 module 容易被 CORS 挡）。它们通过全局命名空间 `window.ZTG` 互相访问：`editor.js` 把 `S`（getter）、`mkObj`、`select`、`P`、`FL` 等挂到 `ZTG` 上，章节文件里的函数用 `G.xxx` 在调用时读取。
 
 - **语言**：`ZTG.t(key, ...参数)` 取界面文字；`ZTG.L({zh, en})` 取章节文字。找不到 key 会 `console.error`，冒烟测试会因此失败。Console 日志存的是 key + 参数，切换语言后旧日志也会跟着变。切换语言时，没改过名字的默认物体（主摄像机 ↔ Main Camera 等）一起改名。
 - **状态 `S`**：`objs`（场景物体）、`assets`（Project 文件）、`prefabs`、`sel`（当前选中）、`tool`（q/w/e/r）、`tab`（scene/game）、`step`（教练步骤）、`playing`、`flags`（教练用的进度标记）。`init()` 建初始场景。
 - **`commit()`**：任何状态改动后调用，会重新渲染顶栏、Hierarchy、Project、Inspector、教练，并更新发光提示。高频变化（拖动、Play 中）用 `syncInspector()` + `checkGuide()`，避免整块重绘打断输入。
-- **物体类型**：`cube`、`sphere`、`capsule`、`cylinder`、`plane`、`quad`、`empty`、`camera`、`light`。每个物体还有 `parent`（父物体 id）、`tag`、`layer`，以及组件 `col`（碰撞体 `{kind: box|sphere|capsule|mesh, trigger}`，3D 物体创建时自带）、`rb`、`cc`（角色控制器）、`agent`（NavMesh 代理）、`navs`（NavMesh 表面，烘焙结果在 `navs.baked`）、`scripts`（`{asset, vals, enabled, seq}`）。组件按 `seq` 排序显示，都能用 ✕ 移除。Prefab 实例通过 `o.prefab` 指向 `S.prefabs[id]`，缩放没有被单独改过时（`scaleOverride=false`）跟随 Prefab。
-- **文件类型**：`folder`、`material`（有 `color`）、`script`、`prefab`、`scene`。
+- **物体类型**：`cube`、`sphere`、`capsule`、`cylinder`、`plane`、`quad`、`empty`、`camera`、`light`、`model`（素材库装饰品），以及 UI：`canvas`、`eventsystem`、`uitext`、`uiimage`、`uislider`、`uibutton`。每个物体还有 `parent`（父物体 id）、`tag`、`layer`，以及组件 `col`（碰撞体 `{kind: box|sphere|capsule|mesh, trigger}`，3D 物体创建时自带）、`rb`、`cc`（角色控制器）、`agent`（NavMesh 代理）、`navs`（NavMesh 表面，烘焙结果在 `navs.baked`）、`scripts`（`{asset, vals, enabled, seq}`）。组件按 `seq` 排序显示，都能用 ✕ 移除。Prefab 实例通过 `o.prefab` 指向 `S.prefabs[id]`，缩放没有被单独改过时（`scaleOverride=false`）跟随 Prefab。
+- **文件类型**：`folder`、`material`（有 `color` 和 `shader`：`URP/Lit`、`URP/Unlit`、`Standard`；`Standard` 会变粉红，和真 Unity 一样）、`script`、`prefab`、`scene`、`model`（素材库导入的装饰品）、`itemdata`（模拟 ScriptableObject，项目里有 ItemData 脚本后 Create 菜单才出现）。在 Project 里双击文件夹进入、双击脚本打开（自己检测两次点击，因为第一次点击会重绘 DOM，原生 dblclick 收不到）。
 - **3D 视图**：Three.js（`#cv`）画物体、灯光、阴影、网格、NavMesh 蓝色区域、选中物体的橙色轮廓；上面叠一层 2D canvas（`#gz`）画 Unity 风格的辅助线：移动箭头、摄像机/灯图标、绿色碰撞体线框、红色射线、蓝色导航路径、准星。场景数据一律是 Unity 坐标（左手、Y 上、Z 前，欧拉角顺序 Z→X→Y，`eulerM` / `mEuler`），交给 Three.js 前用 `tMat()` 两边各乘一个 Z 翻转矩阵。世界坐标用 `wPoint` / `wPos` / `wRot` / `wScale` 一层层套父物体；`reparent` 换父物体时保持世界位置。Scene 视角是绕 `V.target` 旋转的轨道相机；Game 视图用场景里的 Main Camera（可以是玩家的子物体）。点选用 Three.js 的 Raycaster。
 - **物理**（只在 Play 中跑）：碰撞体用世界包围盒（AABB）近似。`rbPhysics` 让有刚体的物体落在任何非触发器碰撞体上；`ccMove`（角色控制器的 SimpleMove）水平方向被挡、上 0.3 米台阶、受重力；`triggers()` 在有刚体/角色控制器/代理的物体进出触发器时往控制台写「[模拟器提示] OnTriggerEnter」。
 - **NavMesh**：`bakeNav` 在没有旋转的 Plane 上切 0.5 米格子，挡住的格子（静态碰撞体 + 0.5 米半径）不能走；`findPath` 是 8 方向 A*。
 - **脚本模板**：文件名决定模板（`LIB()` = ch0 的 PlayerMove + `scripts.js`）。`kind` 决定怎么模拟：`translate`（PlayerMove）、`fps`（FirstPersonMove：鼠标转头 + 角色控制器走路，Game 视图里点一下锁定鼠标，拖动也行）、`chase`（EnemyChase：每 0.25 秒重新找路追 target）。缺组件、没指定 target、没烘焙 NavMesh 时，报和真 Unity 一样的 NullReferenceException / UnassignedReferenceException / SetDestination 错误（每次 Play 每种只报一次），点错误跳到那一行。第一人称时从摄像机正前方做 Physics.Raycast，显示打中什么。
+- **UI**：Screen Space – Overlay，用 HTML 层 `#uilayer` 画（参考分辨率 1920×1080，按宽度缩放）。UI 物体有 Rect Transform（`ui.anchor` 九宫格锚点、`pos`、`size`）。建第一个 UI 物体时自动建 Canvas 和 EventSystem。
+- **生存系统脚本**：`survival`（SurvivalStats：饥饿/口渴随时间下降，驱动 UI Slider）、`daynight`（DayNightCycle：旋转方向光，天空和环境光跟着变，`setSky`）、`saveload`（SaveLoad：F5 存 F9 读，模拟 PlayerPrefs，存在 `ztg.prefs`，Window → PlayerPrefs 查看，Edit 菜单可清空）、`inventory`（Inventory：引用 itemdata 列表，按 1/2/3 拾取并显示在 UI Text）。字段类型：`float`、`transform`、`ref`（只接受某种 UI 物体）、`assetlist`。
+- **美化工具**：前后对比滑块（`#cmpx`，左边灰盒、右边真材质，用 scissor 画两遍）；调色盘（`paletteOf`：相近色 / 互补 / 三色 / 单色，一键生成材质）；素材库（Window → Asset Library，`propThumb` 离屏渲染缩略图）；摆放检查（`layoutCheck`：同角度、排成一线、大小差不多、空角落，用黄色标记）；截图对比（`ztg.snaps`，最多几张并排看）。浮动小窗口用 `openFloat` / `closeFloat`。
+- **模式**：`MODE` = `ch0`（教学）、`free`（自由模式，没有教练步骤）、`bugs`（找 Bug 挑战，第 0 章完成后解锁）。每种模式各存一份进度：`ztg.ch0.save`、`ztg.free.save`、`ztg.bugs.save`。
+- **提示分级**：教学模式下每步先只发亮（0 级），点「给我提示」显示提示文字（1 级），再点「指给我看」才出箭头和「帮我做这一步」（2 级）；同一步卡 25 秒自动升一级。设置里可改成「一直显示箭头」（`ztg.settings.hints = 'always'`）。
+- **学习**：章末小测验（6 题，最好成绩存在 `ztg.ch0.quiz`）；导出到真 Unity（`exportUnity()` 自己写 zip，内含用户的 .cs 脚本 + 「在真 Unity 里怎么做」清单）。
+- **设置**：齿轮按钮（语言、字体大小 90–130%、提示方式、检查更新、关于），「?」键或按钮打开快捷键说明。设置存在 `ztg.settings`。字体缩放在桌面 app 里走 `ztgApp.setZoom`（`setZoomFactor`），没有 preload 时退回 CSS zoom。
+- **检查更新**：桌面 app 每天自动查一次 GitHub Releases 最新版本（`ztg.updchk`），有新版顶部出横条，点了用系统浏览器打开发布页。不会自动安装（macOS 自动安装需要付费代码签名）。
 - **交互**：右键菜单（`openMenu`，手机长按也会触发）；面板之间的拖放是自己用 pointer 事件写的（`data-drag` / `data-drop`），不是 HTML5 drag-and-drop；W 工具可拖彩色箭头沿轴移动，E/R 左右拖动旋转/缩放。
 - **Play 模式**：`startPlay()` 存快照，`stopPlay()` 还原，模拟「Play 模式下的修改会丢失」。只有挂了名为 `PlayerMove` 的脚本的物体会响应 WASD。
 - **组件**：Inspector 底部有「添加组件 / Add Component」（目前只有 物理 → 刚体）。`o.rb = {useGravity, isKinematic, seq}`；脚本和刚体按 `seq`（添加顺序）显示。Cube 显示只读的 Box Collider，Plane 显示 Mesh Collider。
@@ -126,18 +136,18 @@ xvfb-run -a -s "-screen 0 1600x1000x24" npx electron --no-sandbox --disable-gpu 
 
 ## 已知限制
 
-- 没有撤销（Ctrl+Z）。
 - 触屏上的拖放不太顺。
-- 只有第 0 章。
+- 只有第 0 章（另有自由模式和找 Bug 挑战）。
+- 素材库是程序生成的简单模型，不是 Kenney 的真素材（下载外部素材要先问发起人）。
+- 更新只会提示，不会自动下载安装。
 - 编辑器里还只有方向光，没有点光源 / 聚光灯组件、雾、后期处理（Three.js 都做得到，demo 里已有，等写第 1 章时接进编辑器）。
 - 物理是简化版：碰撞体用包围盒，物体之间不会互相推，刚体不会翻倒。
-- 进度只记录「第 0 章是否完成」，中途关掉 app 会从头开始。
 
 ## 建议的下一步（按顺序）
 
 1. ~~拆分 `app/index.html`~~（已完成 2026-10-23）。之后又加了：中英文切换、教练箭头 / 拖动演示、刚体和掉落。
-2. **章节系统**：主页卡片从章节数据生成；每章可以有自己的初始场景；保存每章的进度（做到第几步、场景状态），重开 app 可以继续。
-3. **撤销**：至少支持 Ctrl+Z 撤销 Inspector 修改、创建、删除。
+2. **章节系统**：主页卡片从章节数据生成；每章可以有自己的初始场景。（进度保存已完成。）
+3. ~~撤销~~（已完成）。
 4. ~~为第 1 章升级渲染器~~（已完成）：评估改用 Three.js（打包进项目，不走 CDN），需要能演示：点光源/聚光灯（手电筒）、雾、阴影、后期处理（Vignette、Film Grain、Color Adjustments）。先做一个最小的技术验证，和发起人确认效果后再写第 1 章。
    - 技术验证已做（2026-10-24）：`npm run demo` 打开 `prototypes/renderer-demo.html`，恐怖走廊 + 手电筒 + 闪烁灯泡 + 雾 + 阴影 + 金属/发光/贴图材质 + 后期处理 + 前后对比滑块，60 FPS。发起人已确认效果，编辑器已换成 Three.js（2026-10-24）。
    - Three.js r186 用 esbuild 打包成普通脚本 `app/vendor/three.js`（`window.THREE`，含 EffectComposer、RenderPass、UnrealBloomPass、ShaderPass、OutputPass）。入口 `scripts/three-entry.js`，改了跑 `npm run vendor`，打包结果要提交。r186 已没有 `PCFSoftShadowMap`，用 `PCFShadowMap`。
@@ -185,29 +195,29 @@ xvfb-run -a -s "-screen 0 1600x1000x24" npx electron --no-sandbox --disable-gpu 
 26. Post-processing Volume：Vignette、Film Grain、Bloom、Color Adjustments ⚠（1、4）
 27. 阴影 ⚠（1、4）
 28. 完整材质属性：Metallic、Smoothness、Emission（发光）、贴图（2、4）
-29. 前后对比滑块：一边灰盒，一边美化后（每章）
-30. 调色盘工具：选一个主色，自动推荐 3 到 5 个搭配色（4）
-31. 内置免费素材库（例如 Kenney 的 CC0 低多边形模型），附授权说明（2、3、4）
-32. 装饰摆放检查：提示「太整齐」「大中小比例不对」「这个角落是空的」（4）
-33. 截图对比模式：保存场景的几个版本，并排对比（每章）
+29. 前后对比滑块：一边灰盒，一边美化后（每章）— 已完成
+30. 调色盘工具：选一个主色，自动推荐 3 到 5 个搭配色（4）— 已完成
+31. 内置免费素材库（例如 Kenney 的 CC0 低多边形模型），附授权说明（2、3、4）— 部分完成：10 个程序生成的装饰品；要换 Kenney 真素材需发起人同意下载
+32. 装饰摆放检查：提示「太整齐」「大中小比例不对」「这个角落是空的」（4）— 已完成
+33. 截图对比模式：保存场景的几个版本，并排对比（每章）— 已完成
 
 **E. 游戏系统**
-34. UI Canvas：文字、按钮、图片、血条 / 饥饿条（2）
-35. 昼夜循环（Directional Light 随时间旋转）（2）
-36. 存档 / 读档（模拟 PlayerPrefs 或 JSON）（2）
-37. 物品数据（模拟 ScriptableObject）（2）
+34. UI Canvas：文字、按钮、图片、血条 / 饥饿条（2）— 已完成
+35. 昼夜循环（Directional Light 随时间旋转）（2）— 已完成
+36. 存档 / 读档（模拟 PlayerPrefs 或 JSON）（2）— 已完成（PlayerPrefs）
+37. 物品数据（模拟 ScriptableObject）（2）— 已完成
 38. Raycast 可视化：从摄像机射出的线，显示打中了什么（1、3）— 已完成（第一人称时）
 
 **F. 教练和学习体验**
 39. 每章进度保存：关掉 app 再打开，从同一步继续（全部）— 已完成（localStorage `ztg.ch0.save`）
-40. 提示分级：先轻轻提示，再指出位置，最后才「帮我做」（全部）— 箭头提示已有，还没分级
-41. 找 Bug 挑战：给一个坏掉的场景（材质粉红、画面全黑、AI 不动）让用户修好（每章末尾）
+40. 提示分级：先轻轻提示，再指出位置，最后才「帮我做」（全部）— 已完成
+41. 找 Bug 挑战：给一个坏掉的场景（材质粉红、画面全黑、AI 不动）让用户修好（每章末尾）— 第 0 章已有（4 个 Bug）
 42. 术语悬停解释：鼠标停在 Prefab、Collider 上弹出一句话解释（全部）— 已完成（术语表在 i18n.js 的 TERMS）
-43. 章末小测验（每章）
-44. 自由模式：关掉教练自己随便做（学完后）
-45. 导出到真 Unity：把用户写的脚本导出成 .cs，加一张「在真 Unity 里怎么做」的清单（每章）
+43. 章末小测验（每章）— 第 0 章已有（6 题）
+44. 自由模式：关掉教练自己随便做（学完后）— 已完成
+45. 导出到真 Unity：把用户写的脚本导出成 .cs，加一张「在真 Unity 里怎么做」的清单（每章）— 已完成（zip）
 
 **G. App 本身**
-46. 自动更新（从 GitHub Releases 检查新版本）
+46. 自动更新（从 GitHub Releases 检查新版本）— 部分完成：会检查和提示，不自动安装
 47. 中英文切换 — 已完成
-48. 字体大小、快捷键说明页
+48. 字体大小、快捷键说明页 — 已完成

@@ -19,6 +19,13 @@ const TERM_OF={transform:'transform',meshRenderer:'meshRenderer',boxCollider:'co
 const tip=k=>TERM_OF[k]?` data-term="${TERM_OF[k]}"`:(ZTG.lang()==='zh'?` title="${esc(ZTG.tl('en',k))}"`:'');
 let uid=1; const nid=()=>uid++;
 let S=null;
+const lsGet=k=>{try{return localStorage.getItem(k);}catch(e){return null;}},lsSet=(k,v)=>{try{localStorage.setItem(k,v);}catch(e){}};
+// 设置：教练提示方式、字体大小（存在本机）
+const SET=(()=>{const d={hints:'tiered',zoom:1};try{return Object.assign(d,JSON.parse(lsGet('ztg.settings')||'{}'));}catch(e){return d;}})();
+function setSetting(k,v){SET[k]=v;lsSet('ztg.settings',JSON.stringify(SET));if(k==='zoom')applyZoom();}
+function applyZoom(){const z=SET.zoom||1;if(window.ztgApp&&ztgApp.setZoom)ztgApp.setZoom(z);else document.documentElement.style.zoom=z===1?'':String(z);}
+// 模式：第 0 章 / 自由模式 / 找 Bug 挑战，各自有自己的存档
+let MODE='ch0';
 
 /* ---------- 3D math (Unity convention: left-handed, Y up, Z forward) ---------- */
 function rotV(v,e){let [x,y,z]=v;const [ax,ay,az]=e.map(d=>d*Math.PI/180);
@@ -45,10 +52,21 @@ const hex2rgb=h=>{const m=/^#?([0-9a-f]{6})$/i.exec(h||'');if(!m)return [200,200
 /* ---------- 形状和碰撞体（尺寸和 Unity 一样：Cube 边长 1，Sphere 直径 1，Capsule/Cylinder 高 2，Plane 10×10，Quad 1×1） ---------- */
 const SHAPES=['cube','sphere','capsule','cylinder','plane','quad'];
 const isMesh=o=>SHAPES.includes(o.type);
+// 素材库里的模型（app/props.js）：由几个零件组成，原点在底部
+const PROPS=()=>ZTG.props||{};
+const isModel=o=>o.type==='model';
+const isRender=o=>isMesh(o)||isModel(o);
+// UI：画在游戏画面上面（Screen Space - Overlay），用 1920×1080 的参考分辨率按画面宽度缩放
+const UI_TYPES=['canvas','uitext','uiimage','uislider','uibutton'];
+const isUI=o=>UI_TYPES.includes(o.type);
+const UI_DEF={uitext:{w:200,h:50,text:'New Text',size:36,color:'#ffffff'},uiimage:{w:100,h:100,color:'#ffffff'},
+  uislider:{w:160,h:20,value:0,fill:'#f2f2f2',color:'#5a5f68'},uibutton:{w:160,h:30,text:'Button',color:'#ffffff',tcolor:'#323232',size:24}};
+const ANCH={tl:[0,1],tc:[.5,1],tr:[1,1],ml:[0,.5],mc:[.5,.5],mr:[1,.5],bl:[0,0],bc:[.5,0],br:[1,0]};
 const MESH_COL={cube:'box',sphere:'sphere',capsule:'capsule',cylinder:'capsule',plane:'mesh',quad:'mesh'};
 const COL_KEY={box:'boxCollider',sphere:'sphereCollider',capsule:'capsuleCollider',mesh:'meshCollider'};
 const MESH_BOUNDS={cube:[[-.5,-.5,-.5],[.5,.5,.5]],sphere:[[-.5,-.5,-.5],[.5,.5,.5]],capsule:[[-.5,-1,-.5],[.5,1,.5]],cylinder:[[-.5,-1,-.5],[.5,1,.5]],plane:[[-5,0,-5],[5,0,5]],quad:[[-.5,-.5,0],[.5,.5,0]]};
 function colBounds(o){const k=o.col.kind;
+  if(isModel(o)){const pd=PROPS()[o.model];return pd?pd.bounds:null;}
   if(k==='box')return [[-.5,-.5,-.5],[.5,.5,.5]];if(k==='sphere')return [[-.5,-.5,-.5],[.5,.5,.5]];if(k==='capsule')return [[-.5,-1,-.5],[.5,1,.5]];
   return MESH_BOUNDS[o.type]||null;}
 const CC_BOUNDS=[[-.5,-1,-.5],[.5,1,.5]];
@@ -123,7 +141,7 @@ function rangeSel(id){const order=hierOrder().map(o=>o.id),a=order.indexOf(S.sel
 /* ---------- undo / redo（保存整个场景和项目文件的快照，最多 100 步） ---------- */
 let undoS=[],redoS=[],lastModel='';
 function resetUndo(){undoS=[];redoS=[];lastModel=modelJson();}
-function trackUndo(){if(S.playing)return;const m=modelJson();if(m===lastModel)return;undoS.push(lastModel);if(undoS.length>100)undoS.shift();redoS=[];lastModel=m;}
+function trackUndo(){if(S.playing)return;const m=modelJson();if(m===lastModel)return;layMarks=[];undoS.push(lastModel);if(undoS.length>100)undoS.shift();redoS=[];lastModel=m;}
 function restoreModel(m){const [o,p,a]=JSON.parse(m);S.objs=o;S.prefabs=p;S.assets=a;lastModel=m;S.renaming=null;
   if(S.sel){if(S.sel.k==='obj'){const ids=selIds().filter(id=>obj(id));if(!ids.length)select(null);else{S.multi=ids;if(!obj(S.sel.id))S.sel={k:'obj',id:ids[0]};}}else if(!asset(S.sel.id))select(null);}
   if(S.cwd&&!asset(S.cwd))S.cwd=0;}
@@ -131,16 +149,18 @@ function undo(){if(S.playing||!undoS.length)return;closeMenu();redoS.push(modelJ
 function redo(){if(S.playing||!redoS.length)return;closeMenu();undoS.push(modelJson());restoreModel(redoS.pop());commit();}
 
 /* ---------- 进度保存：关掉 app 再打开，从同一步继续 ---------- */
-const SAVE_KEY='ztg.ch0.save';let saveT=0;
-function saveProgress(){clearTimeout(saveT);saveT=setTimeout(()=>{if(S.playing)return;
-  try{localStorage.setItem(SAVE_KEY,JSON.stringify({v:1,uid,lang:ZTG.lang(),s:{objs:S.objs,prefabs:S.prefabs,assets:S.assets,step:S.step,flags:S.flags,cwd:S.cwd,logs:S.logs.slice(-60),savedJson:S.savedJson,collapsed:S.collapsed}}));}catch(e){}},250);}
-function loadProgress(){let d=null;try{d=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');}catch(e){}
+const saveKey=m=>'ztg.'+(m||MODE)+'.save';let saveT=0;
+function saveProgress(){clearTimeout(saveT);saveT=setTimeout(saveNow,250);}
+function saveNow(){clearTimeout(saveT);if(!S||S.playing)return;
+  try{localStorage.setItem(saveKey(),JSON.stringify({v:1,uid,lang:ZTG.lang(),s:{objs:S.objs,prefabs:S.prefabs,assets:S.assets,step:S.step,flags:S.flags,cwd:S.cwd,logs:S.logs.slice(-60),savedJson:S.savedJson,collapsed:S.collapsed}}));}catch(e){}}
+function loadProgress(){let d=null;try{d=JSON.parse(localStorage.getItem(saveKey())||'null');}catch(e){}
   if(!d||d.v!==1||!d.s||!Array.isArray(d.s.objs)||!Array.isArray(d.s.assets))return false;
   init();Object.assign(S,d.s);S.flags=Object.assign(freshFlags(),d.s.flags);S.collapsed=d.s.collapsed||[];uid=Math.max(uid,d.uid||1);
   S.objs.forEach(fixObj);
   if(d.lang&&d.lang!==ZTG.lang())renameDefaults(d.lang,ZTG.lang());
   resetUndo();return true;}
-function clearProgress(){clearTimeout(saveT);try{localStorage.removeItem(SAVE_KEY);}catch(e){}}
+function clearProgress(){clearTimeout(saveT);try{localStorage.removeItem(saveKey());}catch(e){}}
+const peekStep=m=>{try{const d=JSON.parse(localStorage.getItem(saveKey(m))||'null');return d&&d.s?d.s.step||0:0;}catch(e){return 0;}};
 
 /* ---------- toast ---------- */
 let toastT=0;
@@ -154,13 +174,20 @@ const IC={
   camera:(z,s)=>sv('<rect x="1.5" y="4.5" width="9" height="7" rx="1.2"/><path d="M10.5 7 14.5 5v6l-4-2z"/>',z,s),
   light:(z,s)=>sv('<circle cx="8" cy="8" r="2.6"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/>',z,s),
   empty:(z,s)=>sv('<path d="M8 1.5 14 4.8v6.4L8 14.5 2 11.2V4.8z" stroke-dasharray="2 1.6"/>',z,s),
+  canvas:(z,s)=>sv('<rect x="1.5" y="2.5" width="13" height="11" rx="1.2"/><path d="M1.5 5.5h13"/>',z,s),
+  uitext:(z,s)=>sv('<path d="M3 3.5h10M8 3.5v9.5M5.5 13h5"/>',z,s),
+  uiimage:(z,s)=>sv('<rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 11l4-3.5 3 2.5 2-1.5 3 2.5"/><circle cx="10.5" cy="6" r="1"/>',z,s),
+  uislider:(z,s)=>sv('<path d="M2 8h12"/><circle cx="6" cy="8" r="2.2"/>',z,s),
+  uibutton:(z,s)=>sv('<rect x="1.5" y="4.5" width="13" height="7" rx="2"/><path d="M5.5 8h5"/>',z,s),
+  eventsystem:(z,s)=>sv('<path d="M4 2.5v9l2.5-2.3 1.7 3.8 1.8-.8-1.7-3.7h3.2z"/>',z,s),
+  itemdata:(z,s)=>sv('<path d="M8 1.5 14 8 8 14.5 2 8z"/><path d="M8 5v6M5 8h6"/>',z,s),
   folder:(z,s)=>sv('<path d="M1.5 4.5h5l1.2 1.5h6.8v6.8h-13z"/>',z,s),
   script:(z,s)=>sv('<path d="M3.5 1.5h6l3 3v10h-9z"/><path d="M6 8l-1.5 1.5L6 11M10 8l1.5 1.5L10 11"/>',z,s),
   scene:(z,s)=>sv('<path d="M2 3h12v10H2z"/><path d="M2 10l4-3 3 2 2-1.5 3 2"/>',z,s),
   mat:(z,c)=>`<svg viewBox="0 0 16 16" width="${z||14}" height="${z||14}"><circle cx="8" cy="8" r="6.2" fill="${c||'#fff'}" stroke="rgba(0,0,0,.45)" stroke-width="1.1"/><path d="M4.6 5.4a4.6 4.6 0 0 1 3.4-1.7" stroke="rgba(255,255,255,.75)" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>`
 };
 const objIcon=(o,z)=>(IC[o.type]||IC.cube)(z||14,o.prefab?'color:var(--accent)':'');
-const assetIcon=(a,z)=>a.type==='material'?IC.mat(z,a.color):a.type==='prefab'?IC.cube(z,'color:var(--accent)'):(IC[a.type]||IC.folder)(z);
+const assetIcon=(a,z)=>a.type==='material'?IC.mat(z,a.color):a.type==='prefab'?IC.cube(z,'color:var(--accent)'):a.type==='model'?IC.cube(z,'color:var(--ok)'):a.type==='itemdata'?IC.itemdata(z,`color:${a.color||'#9a6b3c'}`):(IC[a.type]||IC.folder)(z);
 
 /* ---------- context menu ---------- */
 // 菜单项：{tk: 文字的 i18n key, k: 稳定 id（给教练箭头定位用）, fn, children, dis}
@@ -190,13 +217,24 @@ function longPress(el,fn){let tm=0,sx=0,sy=0;
 const nameKey=k=>'n'+k[0].toUpperCase()+k.slice(1);
 function create3D(kind){const o=mkObj(kind,t(nameKey(kind)));select('obj',o.id);log('info','lCreated',o.name);toast(t('created',o.name));commit();}
 function createEmpty(){const o=mkObj('empty',t('nEmpty'));select('obj',o.id);log('info','lCreated',o.name);toast(t('created',o.name));commit();}
-const items3D=()=>[{tk:'createEmpty',k:'empty',fn:createEmpty},{tk:'go3d',k:'go3d',children:SHAPES.map(s=>({tk:s,k:s,fn:()=>create3D(s)}))}];
+const items3D=()=>[{tk:'createEmpty',k:'empty',fn:createEmpty},{tk:'go3d',k:'go3d',children:SHAPES.map(s=>({tk:s,k:s,fn:()=>create3D(s)}))},
+  {tk:'uiM',k:'ui',children:[{tk:'uiText',k:'uitext',fn:()=>createUI('uitext')},{tk:'uiImage',k:'uiimage',fn:()=>createUI('uiimage')},{tk:'uiSlider',k:'uislider',fn:()=>createUI('uislider')},{tk:'uiButton',k:'uibutton',fn:()=>createUI('uibutton')}]}];
+// 和 Unity 一样：场景里没有画布时，先自动建一个画布和事件系统，UI 放在画布下面
+function createUI(kind){let c=S.objs.find(o=>o.type==='canvas');
+  if(!c){c=mkObj('canvas',t('nCanvas'));if(!S.objs.some(o=>o.type==='eventsystem'))mkObj('eventsystem',t('nEventSystem'));}
+  const nk={uitext:'nText',uiimage:'nImage',uislider:'nSlider',uibutton:'nButton'}[kind];
+  const o=mkObj(kind,uniqueName(t(nk),c.id));o.parent=c.id;o.ui=Object.assign({anchor:'mc',x:0,y:0},UI_DEF[kind]);
+  S.collapsed=S.collapsed.filter(x=>x!==c.id);select('obj',o.id);log('info','lCreated',o.name);toast(t('created',o.name));commit();}
+function createItemData(){if(S.ptab!=='project')S.ptab='project';const a=mkAsset('itemdata','NewItemData',null,{itemName:'Item',color:'#9a6b3c',stackable:true,maxStack:20});
+  S.renaming=a.id;select('asset',a.id);commit();setTimeout(()=>{const r=$('#rn');if(r){r.focus();r.select();}},0);}
 function createAsset(kind){
   if(S.ptab!=='project')S.ptab='project';
   const a=kind==='folder'?mkAsset('folder',t('nFolder')):kind==='material'?mkAsset('material',t('nMaterial'),null,{color:'#ffffff'}):mkAsset('script','NewBehaviourScript');
   S.renaming=a.id;select('asset',a.id);commit();
   setTimeout(()=>{const r=$('#rn');if(r){r.focus();r.select();}},0);}
-const itemsCreate=()=>[{tk:'create',k:'create',children:[{tk:'folderM',k:'folder',fn:()=>createAsset('folder')},{tk:'materialM',k:'mat',fn:()=>createAsset('material')},{tk:'scriptM',k:'script',fn:()=>createAsset('script')}]}];
+const itemsCreate=()=>[{tk:'create',k:'create',children:[{tk:'folderM',k:'folder',fn:()=>createAsset('folder')},{tk:'materialM',k:'mat',fn:()=>createAsset('material')},{tk:'scriptM',k:'script',fn:()=>createAsset('script')},
+  // 只有项目里有 ItemData 脚本时才出现（[CreateAssetMenu] 的效果）
+  ...(S.assets.some(a=>a.type==='script'&&a.name==='ItemData')?[{tk:'itemDataM',k:'itemdata',fn:createItemData}]:[])]}];
 const itemsComp=()=>[
   {tk:'physics',k:'physics',children:[{tk:'rigidbodyM',k:'rigidbody',fn:()=>addRigidbody(selObj())},
     {tk:'boxColliderM',k:'boxCol',fn:()=>addCollider('box')},{tk:'sphereColliderM',k:'sphereCol',fn:()=>addCollider('sphere')},
@@ -233,15 +271,23 @@ function saveScene(){S.savedJson=snapJson();S.flags.saved=true;log('info','lSave
 
 function makePrefab(o,folder){
   if(o.prefab){toast(t('alreadyPrefab',o.name));return;}
-  if(!isMesh(o)&&o.type!=='empty'){log('warn','lOnlyPrefab');commit();return;}
+  if(!isRender(o)&&o.type!=='empty'){log('warn','lOnlyPrefab');commit();return;}
   if(kids(o).length){log('warn','lPrefabKids');commit();return;}
   const pid=nid();const a=mkAsset('prefab',o.name,folder,{prefabId:pid});
-  S.prefabs[pid]={id:pid,assetId:a.id,name:o.name,type:o.type,scale:effScale(o).slice(),mat:o.mat,rot:o.rot.slice()};
+  S.prefabs[pid]={id:pid,assetId:a.id,name:o.name,type:o.type,model:o.model||null,scale:effScale(o).slice(),mat:o.mat,rot:o.rot.slice()};
   o.prefab=pid;o.scaleOverride=false;log('info','lPrefabMade',o.name,a.name);toast(t('nowPrefab',o.name));commit();}
 function spawn(a,at){const pf=S.prefabs[a.prefabId];if(!pf)return;
   const n=S.objs.filter(o=>o.prefab===pf.id).length;
-  const o=mkObj(pf.type,pf.name+' ('+n+')',at||[0,.5,0]);o.mat=pf.mat;o.prefab=pf.id;o.rot=pf.rot.slice();select('obj',o.id);
-  log('info','lInst',o.name);commit();}
+  const o=mkObj(pf.type,pf.name+' ('+n+')',at||[0,.5,0]);o.mat=pf.mat;o.prefab=pf.id;o.rot=pf.rot.slice();
+  if(pf.type==='model'){o.model=pf.model;o.col={kind:'box',trigger:false,seq:0};if(at)o.pos[1]=0;}
+  select('obj',o.id);log('info','lInst',o.name);commit();}
+// 把素材库模型从项目窗口拖进场景
+function spawnModel(a,at){const pd=PROPS()[a.model];if(!pd)return;
+  const o=mkObj('model',uniqueName(a.name,null),at?[at[0],0,at[2]]:[0,0,0]);o.model=a.model;o.col={kind:'box',trigger:false,seq:0};
+  select('obj',o.id);log('info','lInst',o.name);commit();}
+function importProp(key){const pd=PROPS()[key];if(!pd)return;
+  let f=S.assets.find(x=>x.type==='folder'&&x.name==='Models'&&x.parent===0);if(!f)f=mkAsset('folder','Models',0);
+  const a=mkAsset('model',pd.en.replace(/\s/g,''),f.id,{model:key});S.ptab='project';S.cwd=f.id;select('asset',a.id);toast(t('imported',L(pd)));commit();}
 
 /* ---------- components ---------- */
 function addRigidbody(o){if(!o)return;
@@ -263,10 +309,11 @@ function addScript(o,a){const tm=tmplOf(a),vals={};
   o.scripts.push({asset:a.id,vals,enabled:true,seq:nid()});}
 function applyAsset(a,o){
   if(!a||!o)return;
-  if(a.type==='material'){if(isMesh(o)){o.mat=a.id;log('info','lMat',a.name,o.name);toast(t('applied',a.name,o.name));}else log('warn','lNoRenderer',o.name);}
+  if(a.type==='material'){if(isRender(o)){o.mat=a.id;log('info','lMat',a.name,o.name);toast(t('applied',a.name,o.name));}else log('warn','lNoRenderer',o.name);}
   else if(a.type==='script'){const tm=LIB()[a.name];
     if(tm&&!tm.blanks.length&&!a.comp)compileScript(a);
     if(!tm){log('error','lScriptErr',a.name);S.ptab='console';toast(t('seeConsole'));}
+    else if(tm.kind==='data'){log('error','lNotMono',a.name);S.ptab='console';toast(t('seeConsole'));}
     else if(!a.comp){log('warn','lNotSaved',a.name);toast(t('lNotSaved',a.name));}
     else if(!a.comp.ok){log('error','lScriptBroken',a.name);S.ptab='console';toast(t('seeConsole'));}
     else if(o.scripts.some(s=>s.asset===a.id))log('warn','lHasScript',o.name);
@@ -287,6 +334,8 @@ function compileErrs(){const out=[];for(const a of S.assets){if(a.type!=='script
 /* ---------- physics (Play 模式下才跑，和真 Unity 一样) ---------- */
 // 碰撞体用世界里的包围盒（AABB）近似。挂了 Rigidbody 的物体受重力，落在有碰撞体的东西上；
 // 没有碰撞体的东西会一直掉；Character Controller 会被墙挡住；是触发器的碰撞体不挡路，只通知「有东西进来了」。
+function inCameraView(o){const c=S.objs.find(q=>q.type==='camera');if(!c)return false;const v=mTV(wRot(c),sub(wPos(o),wPos(c)));if(v[2]<.3)return false;
+  const ty=Math.tan(30*Math.PI/180),tx=ty*(CW/CH||16/9);return Math.abs(v[0]/v[2])<tx&&Math.abs(v[1]/v[2])<ty;}
 const vel=new Map();let COLS=[];
 function colList(){return S.objs.filter(q=>q.col&&colBounds(q)).map(q=>{const b=wAABB(q,colBounds(q));return {o:q,trig:q.col.trigger,min:b[0],max:b[1]};});}
 const dyn=q=>!!(q.rb||q.cc||q.agent);
@@ -353,7 +402,7 @@ function findPath(nv,from,to){const s=nearestOk(nv,...from),g=nearestOk(nv,...to
   return null;}
 
 /* ---------- 脚本在播放时怎么跑（模拟 C#，出错时报和真 Unity 一样的错） ---------- */
-const playErr=new Set(),agentState=new Map();let mdx=0,mdy=0,rayInfo=null;
+const playErr=new Set(),agentState=new Map(),pressedNow=new Set();let mdx=0,mdy=0,rayInfo=null;
 function onceErr(a,key,fn){const k=a.id+':'+key;if(playErr.has(k))return;playErr.add(k);fn();}
 const errLine=(tm,e)=>tm.lines.findIndex(l=>l.err===e);
 function nre(a,tm,e,why){onceErr(a,e,()=>{const ln=errLine(tm,e);logSrc('error','lNRE',[a.name+'.cs',ln+1,why],a,ln);});}
@@ -384,12 +433,29 @@ function runChase(o,s,a,tm,dt){
   const [i,j]=st.path[0];const cx=nv.x0+(i+.5)*nv.cs,cz=nv.z0+(j+.5)*nv.cs;const dx=cx-o.pos[0],dz=cz-o.pos[2],d=Math.hypot(dx,dz);
   if(d<1e-4){st.path.shift();return false;}const step=Math.min(d,o.agent.speed*dt);
   o.pos[0]+=dx/d*step;o.pos[2]+=dz/d*step;o.rot[1]=rnd(Math.atan2(dx,dz)*180/Math.PI);return true;}
+function unassigned(a,tm,field,errKey){onceErr(a,'u_'+field,()=>{const ln=errLine(tm,errKey);logSrc('error','lUnassigned',[a.name,field],a,ln);});}
+const logLineOf=(tm,re)=>tm.lines.findIndex(l=>l.c.some(x=>typeof x==='string'&&re.test(x)));
+function runSurvival(o,s,a,tm,dt){const bar=s.vals.hungerBar!=null?obj(s.vals.hungerBar):null;
+  let h=s.vals.hunger==null?100:s.vals.hunger;h=clamp(h-(s.vals.drainPerSecond||0)*dt,0,100);if(pressedNow.has('KeyE'))h=Math.min(h+30,100);s.vals.hunger=h;
+  if(!bar||!bar.ui){unassigned(a,tm,'hungerBar','noBar');return false;}bar.ui.value=h/100;return true;}
+function runDayNight(o,s,a,dt){const len=s.vals.dayLengthSeconds||30;o.rot[0]+=360/len*dt;if(o.rot[0]>=360)o.rot[0]-=360;return true;}
+// PlayerPrefs：模拟器把它存在本机（localStorage），停止播放、关掉 app 都还在
+function prefsGet(){try{return JSON.parse(localStorage.getItem('ztg.prefs')||'{}');}catch(e){return {};}}
+function prefsSet(p){try{localStorage.setItem('ztg.prefs',JSON.stringify(p));}catch(e){}}
+function runSaveLoad(o,s,a,tm){
+  if(pressedNow.has('KeyK')){const p=prefsGet(),w=wPos(o);p.playerX=rnd(w[0]);p.playerZ=rnd(w[2]);prefsSet(p);logSrc('info','raw',['Saved'],a,logLineOf(tm,/"Saved"/));}
+  if(pressedNow.has('KeyL')){const p=prefsGet(),w=wPos(o);setWorldPos(o,[p.playerX||0,w[1],p.playerZ||0]);vel.delete(o.id);logSrc('info','raw',['Loaded'],a,logLineOf(tm,/"Loaded"/));return true;}
+  return false;}
+function startInventory(o,s,a,tm){const tx=s.vals.listText!=null?obj(s.vals.listText):null;
+  let text='Inventory:';for(const id of (s.vals.startItems||[])){const it=asset(id);if(it)text+='\n- '+(it.itemName||it.name);}
+  if(!tx||!tx.ui){unassigned(a,tm,'listText','noText');return;}tx.ui.text=text;logSrc('info','raw',[text],a,logLineOf(tm,/Debug\.Log/));}
 function runScripts(dt){let moving=false;const ran=new Set();
   for(const o of S.objs)for(const s of o.scripts){const a=asset(s.asset);const tm=a&&LIB()[a.name];if(!s.enabled||!tm||!a.comp||!a.comp.ok)continue;ran.add(a.id);
     if(!s.vals)s.vals={speed:5};
     let mv=false;if(tm.kind==='translate')mv=runPlayerMove(o,s,a,dt);else if(tm.kind==='fps')mv=runFPS(o,s,a,tm,dt);else if(tm.kind==='chase')mv=runChase(o,s,a,tm,dt);
+    else if(tm.kind==='survival')mv=runSurvival(o,s,a,tm,dt);else if(tm.kind==='daynight')mv=runDayNight(o,s,a,dt);else if(tm.kind==='saveload')mv=runSaveLoad(o,s,a,tm);
     if(mv)moving=a.id;}
-  mdx=mdy=0;return {moving,ran};}
+  mdx=mdy=0;pressedNow.clear();return {moving,ran};}
 
 /* ---------- Three.js 画面 ---------- */
 const cv=$('#cv'),gz=$('#gz'),gctx=gz.getContext('2d');let CW=300,CH=200,DPR=1,LV=null,icons=[],handles=[];
@@ -407,7 +473,10 @@ const GEO={cube:new T3.BoxGeometry(1,1,1),sphere:new T3.SphereGeometry(.5,32,20)
 const EDGES={plane:new T3.EdgesGeometry(GEO.plane),quad:new T3.EdgesGeometry(GEO.quad)};
 const DEF_MAT=new T3.MeshStandardMaterial({color:0xcdcdcd,roughness:.55});
 const MATS=new Map();
-function matFor(o){const m=matOf(o);if(!m)return DEF_MAT;let mm=MATS.get(m.id);if(!mm){mm=new T3.MeshStandardMaterial({roughness:.5});MATS.set(m.id,mm);}mm.color.set(m.color);return mm;}
+// Standard 是旧的内置渲染管线着色器：在 URP 项目里会变成粉红色，和真 Unity 一样
+function matFor(o){const m=matOf(o);if(!m)return DEF_MAT;const sh=m.shader||'URP/Lit',key=m.id+'|'+sh;let mm=MATS.get(key);
+  if(!mm){mm=sh==='Standard'?new T3.MeshBasicMaterial({color:0xff00ff}):sh==='URP/Unlit'?new T3.MeshBasicMaterial({}):new T3.MeshStandardMaterial({roughness:.5});MATS.set(key,mm);}
+  if(sh!=='Standard')mm.color.set(m.color);return mm;}
 // Unity 坐标 → Three.js 坐标：两边各乘一个 Z 翻转矩阵（行列式不变，所以正反面不会反）
 const FLIP=new T3.Matrix4().makeScale(1,1,-1);
 function uMat(o){const R=eulerM(o.rot),s=effScale(o);const m=new T3.Matrix4().set(
@@ -416,18 +485,46 @@ function uMat(o){const R=eulerM(o.rot),s=effScale(o);const m=new T3.Matrix4().se
 const tMat=m=>FLIP.clone().multiply(m).multiply(FLIP);
 const M3=new Map(),OUT=new Map();
 const OUT_MAT=new T3.MeshBasicMaterial({color:0xff9a1f,side:T3.BackSide}),OUT_LINE=new T3.LineBasicMaterial({color:0xff9a1f});
+EDGES.box=new T3.EdgesGeometry(GEO.cube);
+// 素材库模型：每个零件一个 Mesh，放在一个 Group 里
+const PGEO={box:new T3.BoxGeometry(1,1,1),cyl:new T3.CylinderGeometry(.5,.5,1,12),cone:new T3.ConeGeometry(.5,1,10),sphere:new T3.SphereGeometry(.5,14,10),ico:new T3.IcosahedronGeometry(.5,0)};
+const PMATS=new Map();
+function pmat(c,e){const k=c+'|'+(e||'');let m=PMATS.get(k);if(!m){m=new T3.MeshStandardMaterial({color:c,roughness:.8,flatShading:true});if(e){m.emissive.set(e);m.emissiveIntensity=1.6;}PMATS.set(k,m);}return m;}
+function partMat(q){const R=eulerM(q.r||[0,0,0]),s=q.s;return new T3.Matrix4().set(R[0][0]*s[0],R[1][0]*s[1],R[2][0]*s[2],q.p[0],R[0][1]*s[0],R[1][1]*s[1],R[2][1]*s[2],q.p[1],R[0][2]*s[0],R[1][2]*s[1],R[2][2]*s[2],q.p[2],0,0,0,1);}
+function buildModel(o){const pd=PROPS()[o.model],g=new T3.Group();g.matrixAutoUpdate=false;g.userData={id:o.id,type:'model',model:o.model};if(!pd)return g;
+  for(const q of pd.parts){const mesh=new T3.Mesh(PGEO[q.g],pmat(q.c,q.e));mesh.matrixAutoUpdate=false;mesh.matrix.copy(tMat(partMat(q)));
+    mesh.castShadow=mesh.receiveShadow=true;mesh.userData={id:o.id,main:!!q.main,c:q.c,e:q.e};g.add(mesh);}return g;}
 function sync3(selSet){const seen=new Set();
-  for(const o of S.objs){if(!isMesh(o))continue;let m=M3.get(o.id);
-    if(!m||m.userData.type!==o.type){if(m)scene3.remove(m);m=new T3.Mesh(GEO[o.type],DEF_MAT);m.matrixAutoUpdate=false;m.receiveShadow=true;m.userData={id:o.id,type:o.type};scene3.add(m);M3.set(o.id,m);}
-    m.castShadow=o.type!=='plane';m.material=matFor(o);m.matrix.copy(tMat(uMat(o)));m.matrixWorldNeedsUpdate=true;seen.add(o.id);}
+  for(const o of S.objs){if(!isRender(o))continue;let m=M3.get(o.id);
+    const stale=!m||m.userData.type!==o.type||(isModel(o)&&m.userData.model!==o.model);
+    if(stale){if(m)scene3.remove(m);
+      if(isModel(o))m=buildModel(o);else{m=new T3.Mesh(GEO[o.type],DEF_MAT);m.matrixAutoUpdate=false;m.receiveShadow=true;m.userData={id:o.id,type:o.type};}
+      scene3.add(m);M3.set(o.id,m);}
+    if(isModel(o))m.children.forEach(c=>{c.material=c.userData.main&&o.mat?matFor(o):pmat(c.userData.c,c.userData.e);});
+    else{m.castShadow=o.type!=='plane';m.material=matFor(o);}
+    m.matrix.copy(tMat(uMat(o)));m.matrixWorldNeedsUpdate=true;seen.add(o.id);}
   for(const [id,m] of M3)if(!seen.has(id)){scene3.remove(m);M3.delete(id);}
-  // 选中物体的橙色轮廓：立体形状用放大一点的背面，平面用边线
+  // 选中物体的橙色轮廓：立体形状用放大一点的背面，平面用边线，模型用包围盒
   for(const [id,m] of OUT)if(!selSet.has(id)||!M3.has(id)){scene3.remove(m);OUT.delete(id);}
-  for(const id of selSet){const base=M3.get(id);if(!base)continue;const ty=base.userData.type,flat=ty==='plane'||ty==='quad';let m=OUT.get(id);
-    if(!m||m.userData.type!==ty){if(m)scene3.remove(m);m=flat?new T3.LineSegments(EDGES[ty],OUT_LINE):new T3.Mesh(GEO[ty],OUT_MAT);m.matrixAutoUpdate=false;m.userData.type=ty;scene3.add(m);OUT.set(id,m);}
-    m.matrix.copy(base.matrix);if(!flat)m.matrix.multiply(new T3.Matrix4().makeScale(1.045,1.045,1.045));m.matrixWorldNeedsUpdate=true;}
-  const light=S.objs.find(o=>o.type==='light');sun.visible=!!light;
-  if(light){const d=mMV(wRot(light),[0,0,1]);sun.target.position.set(0,0,0);sun.position.set(-d[0]*40,-d[1]*40,d[2]*40);sun.target.updateMatrixWorld();}}
+  for(const id of selSet){const base=M3.get(id);if(!base)continue;const ty=base.userData.type,line=ty==='plane'||ty==='quad'||ty==='model';let m=OUT.get(id);
+    if(!m||m.userData.type!==ty){if(m)scene3.remove(m);m=line?new T3.LineSegments(EDGES[ty==='model'?'box':ty],OUT_LINE):new T3.Mesh(GEO[ty],OUT_MAT);m.matrixAutoUpdate=false;m.userData.type=ty;scene3.add(m);OUT.set(id,m);}
+    if(ty==='model'){const o=obj(id),b=colBounds({type:'model',model:o.model,col:{kind:'box'}});
+      m.matrix.copy(tMat(uMat(o).multiply(new T3.Matrix4().makeTranslation((b[0][0]+b[1][0])/2,(b[0][1]+b[1][1])/2,(b[0][2]+b[1][2])/2)).multiply(new T3.Matrix4().makeScale(b[1][0]-b[0][0]+.04,b[1][1]-b[0][1]+.04,b[1][2]-b[0][2]+.04))));}
+    else{m.matrix.copy(base.matrix);if(!line)m.matrix.multiply(new T3.Matrix4().makeScale(1.045,1.045,1.045));}
+    m.matrixWorldNeedsUpdate=true;}
+  // 太阳越低越暗，落到地平线下面就是晚上（昼夜循环脚本会转方向光）
+  const light=S.objs.find(o=>o.type==='light');sun.visible=!!light;let elev=.77;
+  if(light){const d=mMV(wRot(light),[0,0,1]);sun.target.position.set(0,0,0);sun.position.set(-d[0]*40,-d[1]*40,d[2]*40);sun.target.updateMatrixWorld();elev=-d[1];}
+  const day=clamp(elev*3,0,1);sun.intensity=2.4*day;amb.intensity=.25+.95*clamp(elev*2+.3,0,1);sun.color.setRGB(1,.82+.18*day,.7+.3*day);setSky(elev);}
+let skyKey=null;
+const lerpC=(a,b,k)=>'#'+hex2rgb(a).map((v,i)=>Math.round(v+(hex2rgb(b)[i]-v)*k).toString(16).padStart(2,'0')).join('');
+function setSky(e){const k=Math.round(e*50);if(k===skyKey)return;skyKey=k;let top,bot;
+  if(e>.25){top='#78b0e6';bot='#d8eaf8';}else if(e>0){top=lerpC('#3b4a7a','#78b0e6',e/.25);bot=lerpC('#f0a060','#d8eaf8',e/.25);}
+  else{const f=clamp(-e/.25,0,1);top=lerpC('#3b4a7a','#070b18',f);bot=lerpC('#f0a060','#1b2340',f);}
+  const old=BG.game;BG.game=gradTex(top,bot);if(old)old.dispose();}
+// 前后对比：左边用灰盒材质再画一次
+const cmp={on:false,x:.5};const GREYM=new T3.MeshStandardMaterial({color:0x9a9a9a,roughness:1});
+function setGrey(on){for(const m of M3.values())m.traverse(n=>{if(!n.isMesh)return;if(on){n.userData._m=n.material;n.material=GREYM;}else if(n.userData._m){n.material=n.userData._m;delete n.userData._m;}});}
 // NavMesh 蓝色区域（只在场景视图显示）
 let navMesh3=null,navKey='';
 function syncNav(){const nv=NAV(),k=nv?nv.x0+','+nv.z0+','+nv.nx+','+nv.nz+','+nv.y+nv.w:'';if(k===navKey)return;navKey=k;
@@ -445,7 +542,7 @@ const RC=new T3.Raycaster();
 // 从某个世界点朝某个方向射一条线，返回先打中的物体（模拟 Physics.Raycast：只打有碰撞体的物体）
 function raycastW(from,dir,skip){RC.set(new T3.Vector3(from[0],from[1],-from[2]),new T3.Vector3(dir[0],dir[1],-dir[2]).normalize());RC.far=100;
   const list=[...M3.values()].filter(m=>{const o=obj(m.userData.id);return o&&o.col&&!skip.has(o.id);});
-  const h=RC.intersectObjects(list,false)[0];return h?{o:obj(h.object.userData.id),d:h.distance,p:[h.point.x,h.point.y,-h.point.z]}:null;}
+  const h=RC.intersectObjects(list,true)[0];return h?{o:obj(h.object.userData.id),d:h.distance,p:[h.point.x,h.point.y,-h.point.z]}:null;}
 function draw(){
   const game=S.tab==='game',selSet=new Set(game?[]:selIds());const cam=activeCam();icons=[];handles=[];
   gctx.setTransform(DPR,0,0,DPR,0,0);gctx.clearRect(0,0,CW,CH);
@@ -453,7 +550,8 @@ function draw(){
   sync3(selSet);syncNav();if(navMesh3)navMesh3.visible=!game;grid.visible=!game;scene3.background=BG[game?'game':'scene'];
   const Mc=cam.M,p=cam.pos;cam3.matrixWorld.copy(tMat(new T3.Matrix4().set(Mc[0][0],Mc[1][0],Mc[2][0],p[0],Mc[0][1],Mc[1][1],Mc[2][1],p[1],Mc[0][2],Mc[1][2],Mc[2][2],p[2],0,0,0,1)));
   cam3.matrixWorldInverse.copy(cam3.matrixWorld).invert();cam3.fov=cam.fov;cam3.aspect=CW/CH;cam3.updateProjectionMatrix();
-  R3.render(scene3,cam3);
+  R3.render(scene3,cam3);renderUI(game);
+  if(cmp.on){setGrey(true);R3.setScissorTest(true);R3.setScissor(0,0,CW*cmp.x,CH);R3.render(scene3,cam3);R3.setScissorTest(false);setGrey(false);}
   const f=(CH/2)/Math.tan(cam.fov*Math.PI/360);LV={cam,f};
   const toV=q=>mTV(cam.M,sub(q,cam.pos)),pr=v=>[CW/2+v[0]/v[2]*f,CH/2-v[1]/v[2]*f];
   const line=(a,b)=>{const c=clipNear([toV(a),toV(b)],.05);if(c.length<2)return;const A=pr(c[0]),B=pr(c[1]);gctx.moveTo(A[0],A[1]);gctx.lineTo(B[0],B[1]);};
@@ -464,7 +562,7 @@ function draw(){
       const txt=rayInfo.h?t('rayHit',rayInfo.h.o.name,rayInfo.h.d.toFixed(1)):t('rayNone');gctx.font='12px '+getComputedStyle(document.body).fontFamily;const w=gctx.measureText(txt).width+16;
       gctx.fillStyle='rgba(10,12,16,.7)';gctx.fillRect(CW/2-w/2,CH-40,w,22);gctx.fillStyle='#fff';gctx.textAlign='center';gctx.fillText(txt,CW/2,CH-25);
       if(document.pointerLockElement!==cv){gctx.fillStyle='rgba(10,12,16,.7)';const t2=t('clickToLook'),w2=gctx.measureText(t2).width+16;gctx.fillRect(CW/2-w2/2,52,w2,22);gctx.fillStyle="#fff";gctx.fillText(t2,CW/2,67);}}
-    return;}
+    drawCompare();return;}
   // 场景视图：射线（红线）、导航路径、碰撞体线框（绿）、摄像机和灯的图标、移动箭头
   if(rayInfo){gctx.strokeStyle='#ff5050';gctx.lineWidth=2;gctx.beginPath();line(rayInfo.from,add(rayInfo.from,mul(rayInfo.dir,rayInfo.h?rayInfo.h.d:30)));gctx.stroke();
     if(rayInfo.h){const v=toV(rayInfo.h.p);if(v[2]>.1){const q=pr(v);gctx.fillStyle='#ff5050';gctx.beginPath();gctx.arc(q[0],q[1],5,0,7);gctx.fill();}}}
@@ -482,6 +580,9 @@ function draw(){
       else if(k==='sphere'){ring(o,0,.5,'y',hot);ring(o,0,.5,'x',hot);ring(o,0,.5,'z',hot);}
       else{ring(o,.5,.5,'y',hot);ring(o,-.5,.5,'y',hot);ring(o,0,.5,'x',hot);ring(o,0,.5,'z',hot);wire(o,[[-.5,-.5,-.5],[.5,.5,.5]],hot);}}
     if(o.cc&&selSet.has(o.id)){ring(o,1,.5,'y');ring(o,-1,.5,'y');ring(o,0,1,'x');}}
+  // 摆放检查标出来的空角落
+  for(const mk of layMarks){const v=toV(mk.p);if(v[2]<.1)continue;const q=pr(v);gctx.strokeStyle='#f2c230';gctx.lineWidth=2.5;gctx.beginPath();gctx.arc(q[0],q[1],Math.max(14,320/v[2]),0,7);gctx.stroke();
+    gctx.font='12px '+getComputedStyle(document.body).fontFamily;gctx.textAlign='center';gctx.fillStyle='#f2c230';gctx.fillText(t('emptyHere'),q[0],q[1]+4);}
   const sel=selObj();
   for(const o of S.objs){
     if(o.type!=='camera'&&o.type!=='light')continue;
@@ -499,7 +600,7 @@ function draw(){
     }
     icons.push({id:o.id,x:c[0],y:c[1],r:16});
   }
-  if(sel){
+  if(sel&&!isUI(sel)&&sel.type!=='eventsystem'){
     const sp=wPos(sel),v=toV(sp);
     if(v[2]>.1){const c=pr(v);
       if(S.tool==='w'){const len=Math.max(.5,v[2]*.2);
@@ -511,19 +612,162 @@ function draw(){
       else if(S.tool==='r'){gctx.strokeStyle='#e5a13a';gctx.lineWidth=2;gctx.strokeRect(c[0]-24,c[1]-24,48,48);}
     }
   }
+  drawCompare();
 }
+function drawCompare(){if(!cmp.on)return;const x=CW*cmp.x;gctx.fillStyle='#f0b24a';gctx.fillRect(x-1,0,2,CH);
+  gctx.font='12px '+getComputedStyle(document.body).fontFamily;const lab=(txt,px,al)=>{const w=gctx.measureText(txt).width+14;const bx=al==='r'?px-w-8:px+8;gctx.fillStyle='rgba(10,12,16,.72)';gctx.fillRect(bx,CH-30,w,20);gctx.fillStyle='#fff';gctx.textAlign='left';gctx.fillText(txt,bx+7,CH-16);};
+  lab(t('beforeLbl'),x,'r');lab(t('afterLbl'),x,'l');}
+let uiKey='';
+function renderUI(game){const layer=$('#uilayer');const sel=new Set(selIds());
+  const els=S.objs.filter(o=>isUI(o)&&o.ui&&par(o)&&par(o).type==='canvas');
+  const key=JSON.stringify([CW,CH,game,els.map(o=>[o.id,o.type,o.ui,sel.has(o.id)])]);if(key===uiKey)return;uiKey=key;
+  const sf=CW/1920;layer.className=game?'':'preview';
+  layer.innerHTML=els.map(o=>{const u=o.ui,[ax,ay]=ANCH[u.anchor]||[.5,.5],w=u.w*sf,h=u.h*sf,cx=ax*CW+u.x*sf,cy=CH-(ay*CH+u.y*sf);
+    const st=`left:${cx-w/2}px;top:${cy-h/2}px;width:${w}px;height:${h}px;`,sc=sel.has(o.id)?' sel':'';
+    if(o.type==='uitext')return `<div class="uiel uitext${sc}" style="${st}color:${esc(u.color)};font-size:${u.size*sf}px">${esc(u.text)}</div>`;
+    if(o.type==='uiimage')return `<div class="uiel${sc}" style="${st}background:${esc(u.color)}"></div>`;
+    if(o.type==='uislider')return `<div class="uiel uislider${sc}" style="${st}background:${esc(u.color)}"><i style="width:${clamp(u.value,0,1)*100}%;background:${esc(u.fill)}"></i></div>`;
+    return `<div class="uiel uibutton${sc}" style="${st}background:${esc(u.color)};color:${esc(u.tcolor)};font-size:${u.size*sf}px">${esc(u.text)}</div>`;}).join('');}
 function fpsActive(){for(const o of S.objs)for(const s of o.scripts){const a=asset(s.asset);const tm=a&&LIB()[a.name];if(s.enabled&&tm&&tm.kind==='fps'&&a.comp&&a.comp.ok)return o;}return null;}
 function rayAt(x,y){if(!LV)return null;const d=mMV(LV.cam.M,norm([(x-CW/2)/LV.f,-(y-CH/2)/LV.f,1]));return {o:LV.cam.pos,d};}
 function axisParam(x,y,P0,A){const r=rayAt(x,y);if(!r)return null;const w0=sub(P0,r.o);const b=dot(A,r.d),d=dot(A,w0),e=dot(r.d,w0);const den=1-b*b;if(Math.abs(den)<1e-4)return null;return (b*e-d)/den;}
 function pickAt(x,y){for(const ic of icons){if(Math.hypot(x-ic.x,y-ic.y)<ic.r)return ic.id;}
   if(!LV)return null;RC.setFromCamera(new T3.Vector2(x/CW*2-1,-(y/CH*2-1)),cam3);RC.far=Infinity;
-  const h=RC.intersectObjects([...M3.values()],false)[0];return h?h.object.userData.id:null;}
+  const h=RC.intersectObjects([...M3.values()],true)[0];return h?h.object.userData.id:null;}
 function groundPt(x,y){const r=rayAt(x,y);if(!r||r.d[1]>=-.001)return null;const tt=-r.o[1]/r.d[1];return [r.o[0]+r.d[0]*tt,.5,r.o[2]+r.d[2]*tt];}
 // 物体中心、W 工具箭头在屏幕上的位置（给教练的拖动演示用）
 function objScreen(id){const o=obj(id);if(!o||!LV)return null;const v=mTV(LV.cam.M,sub(wPos(o),LV.cam.pos));if(v[2]<.1)return null;
   const r=cv.getBoundingClientRect();return {x:r.left+CW/2+v[0]/v[2]*LV.f,y:r.top+CH/2-v[1]/v[2]*LV.f};}
 function handleAt(axis){const h=handles.find(x=>x.axis===axis);if(!h)return null;const r=cv.getBoundingClientRect();
   return {a:{x:r.left+h.a[0],y:r.top+h.a[1]},b:{x:r.left+h.b[0],y:r.top+h.b[1]}};}
+
+/* ---------- 美化工具：摆放检查、快照、浮动窗口（素材库 / 快照对比）、调色盘 ---------- */
+let layMarks=[];
+function layoutCheck(){layMarks=[];
+  const decor=S.objs.filter(o=>isRender(o)&&o.type!=='plane'&&o.name.trim().toLowerCase()!=='player');
+  if(decor.length<3){log('info','lLayFew');toast(t('lLayFew'));commit();return;}
+  const msgs=[],ps=decor.map(wPos),bb=decor.map(o=>wAABB(o,isModel(o)?colBounds(o):MESH_BOUNDS[o.type]));
+  const ang=o=>{const a=((o.rot[1]%90)+90)%90;return Math.min(a,90-a);};
+  const straight=decor.filter(o=>ang(o)<2);
+  if(straight.length>=3&&straight.length/decor.length>=.7)msgs.push(['lLayGrid',straight.length]);
+  const inLine=k=>ps.some(p=>ps.filter(q=>Math.abs(q[k]-p[k])<.15).length>=3);
+  if(inLine(0)||inLine(2))msgs.push(['lLayLine']);
+  const sizes=bb.map(b=>Math.max(b[1][0]-b[0][0],b[1][1]-b[0][1],b[1][2]-b[0][2]));
+  if(Math.max(...sizes)/Math.max(.01,Math.min(...sizes))<1.6)msgs.push(['lLaySize']);
+  // 空角落：把最大的地板分成 3×3，看四个角有没有东西
+  const area=b=>(b[1][0]-b[0][0])*(b[1][2]-b[0][2]);
+  const fl=S.objs.filter(o=>o.type==='plane').map(o=>wAABB(o,MESH_BOUNDS.plane)).sort((a,b)=>area(b)-area(a))[0];
+  if(fl){const w=(fl[1][0]-fl[0][0])/3,d=(fl[1][2]-fl[0][2])/3;let empty=0;
+    for(const [i,j] of [[0,0],[2,0],[0,2],[2,2]]){const x0=fl[0][0]+i*w,z0=fl[0][2]+j*d;
+      if(!ps.some(p=>p[0]>=x0&&p[0]<=x0+w&&p[2]>=z0&&p[2]<=z0+d)){empty++;layMarks.push({p:[x0+w/2,fl[1][1]+.05,z0+d/2]});}}
+    if(empty)msgs.push(['lLayEmpty',empty]);}
+  if(!msgs.length){log('info','lLayOk');toast(t('lLayOk'));}else{msgs.forEach(m=>log('info',...m));toast(t('layoutDone',msgs.length));}
+  commit();}
+// 快照：把现在的画面缩小存起来（最多 8 张），在「快照对比」窗口并排看
+let snaps=[];try{snaps=JSON.parse(localStorage.getItem('ztg.snaps')||'[]');}catch(e){snaps=[];}
+let snapSeq=snaps.reduce((m,x)=>Math.max(m,x.n||0),0);
+function saveSnaps(){for(let i=0;i<3;i++){try{localStorage.setItem('ztg.snaps',JSON.stringify(snaps));return;}catch(e){snaps.shift();}}}
+function takeSnap(){draw();const w=480,h=Math.round(480*CH/CW),c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(cv,0,0,w,h);
+  snaps.push({n:++snapSeq,img:c.toDataURL('image/jpeg',.82),t:now8()});if(snaps.length>8)snaps.shift();saveSnaps();toast(t('snapTaken',snapSeq));if(floatId==='snaps')openSnaps();}
+let floatId=null;
+function openFloat(id,title,html,bind){floatId=id;const f=$('#float');
+  f.innerHTML=`<div class="win fwin" role="dialog" aria-label="${esc(title)}"><div class="ph cph"><b>${esc(title)}</b><span class="sp"></span><button class="ibtn" id="fclose" aria-label="${t('close')}">✕</button></div><div class="fbody">${html}</div></div>`;
+  f.classList.add('show');$('#fclose').onclick=closeFloat;if(bind)bind(f);}
+function closeFloat(){if(floatId==null)return;floatId=null;const f=$('#float');f.classList.remove('show');f.innerHTML='';}
+let thumbR=null;const thumbs={};
+function propThumb(k){if(thumbs[k])return thumbs[k];
+  if(!thumbR){thumbR=new T3.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});thumbR.setSize(120,100,false);thumbR.toneMapping=T3.ACESFilmicToneMapping;}
+  const sc=new T3.Scene();sc.add(new T3.HemisphereLight(0xffffff,0x555555,2.2));const dl=new T3.DirectionalLight(0xffffff,2);dl.position.set(3,5,4);sc.add(dl);
+  const g=buildModel({id:-1,model:k,mat:null});sc.add(g);const b=PROPS()[k].bounds;
+  const size=Math.max(b[1][0]-b[0][0],b[1][1]-b[0][1],b[1][2]-b[0][2]),cy=(b[0][1]+b[1][1])/2;
+  const cam=new T3.PerspectiveCamera(35,1.2,.05,100);cam.position.set(size*1.5,cy+size*.8,size*1.9);cam.lookAt(0,cy,0);
+  thumbR.render(sc,cam);thumbs[k]=thumbR.domElement.toDataURL();return thumbs[k];}
+function openLibrary(){const P=PROPS();
+  openFloat('lib',t('library'),`<p class="fnote">${esc(t('libNote'))}</p><div class="libgrid">${Object.keys(P).map(k=>`<div class="libcard"><img src="${propThumb(k)}" alt="" width="120" height="100"><b>${esc(L(P[k]))}</b><button class="btn" data-imp="${k}">${t('importBtn')}</button></div>`).join('')}</div>`,
+    f=>f.addEventListener('click',e=>{const b=e.target.closest('[data-imp]');if(b)importProp(b.dataset.imp);}));}
+function openSnaps(){
+  openFloat('snaps',t('snapsT'),snaps.length?`<div class="snapgrid">${snaps.map((x,i)=>`<figure><img src="${x.img}" alt=""><figcaption>${esc(t('snapN',x.n))} · ${x.t}<span class="sp"></span><button class="ibtn rm" data-snapdel="${i}" aria-label="✕">✕</button></figcaption></figure>`).join('')}</div><div class="gact"><button class="btn quiet" data-snapclear>${t('clearAll')}</button></div>`:`<p class="fnote">${esc(t('snapsEmpty'))}</p>`,
+    f=>f.addEventListener('click',e=>{const d=e.target.closest('[data-snapdel]');if(d){snaps.splice(+d.dataset.snapdel,1);saveSnaps();openSnaps();}else if(e.target.closest('[data-snapclear]')){snaps=[];saveSnaps();openSnaps();}}));}
+function openPrefs(){const p=prefsGet(),ks=Object.keys(p);
+  openFloat('prefs',t('prefsT'),ks.length?`<table class="ptable"><tr><th>${t('keyL')}</th><th>${t('valueCol')}</th></tr>${ks.map(k=>`<tr><td>${esc(k)}</td><td>${esc(String(p[k]))}</td></tr>`).join('')}</table>`:`<p class="fnote">${esc(t('prefsEmpty'))}</p>`);}
+// 设置、快捷键说明、检查更新（更新信息由桌面 app 的主进程向 GitHub 查询，见 preload.js）
+let appVersion='0.1.0';
+function openSettings(){const z=SET.zoom||1;
+  openFloat('settings',t('settingsT'),`<div class="setrow"><b>${t('langL')}</b><div class="seg"><button data-lang="zh" class="${ZTG.lang()==='zh'?'on':''}">中文</button><button data-lang="en" class="${ZTG.lang()==='en'?'on':''}">English</button></div></div>
+  <div class="setrow"><b>${t('fontL')}</b><div class="seg">${[.9,1,1.15,1.3].map(v=>`<button data-zoom="${v}" class="${Math.abs(v-z)<.01?'on':''}">${t('font_'+Math.round(v*100))}</button>`).join('')}</div></div>
+  <div class="setrow"><b>${t('hintsL')}</b><label class="ck"><input type="radio" name="hints" value="tiered"${SET.hints!=='always'?' checked':''}> ${t('hintsTiered')}</label><label class="ck"><input type="radio" name="hints" value="always"${SET.hints==='always'?' checked':''}> ${t('hintsAlways')}</label></div>
+  <div class="setrow"><b>${t('updateL')}</b><div><button class="btn" data-upd>${t('checkUpdate')}</button></div><div class="fnote" id="updres"></div></div>
+  <div class="setrow"><b>${t('aboutL')}</b><p class="fnote">${esc(t('aboutText',appVersion))}</p></div>`,
+  f=>{f.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+      if(b.dataset.lang){if(b.dataset.lang!==ZTG.lang())toggleLang();}else if(b.dataset.zoom){setSetting('zoom',+b.dataset.zoom);openSettings();}
+      else if(b.hasAttribute('data-upd'))checkUpdates(true);else if(b.hasAttribute('data-open-rel')&&window.ztgApp)ztgApp.openRelease();});
+    f.addEventListener('change',e=>{if(e.target.name==='hints'){setSetting('hints',e.target.value);hintT=performance.now();renderGuide();updateHint();}});});}
+function openShortcuts(){openFloat('shortcuts',t('shortcutsT'),`<table class="ptable sctable">${t('sc').map(([k,d])=>`<tr><td><kbd>${esc(k)}</kbd></td><td>${esc(d)}</td></tr>`).join('')}</table>`);}
+async function checkUpdates(manual){const show=h=>{const el=$('#updres');if(el)el.innerHTML=h;};
+  if(!window.ztgApp||!ztgApp.checkUpdate){if(manual)show(esc(t('updateNA')));return;}
+  if(manual)show(esc(t('checking')));
+  try{const r=await ztgApp.checkUpdate();if(r.error)throw new Error(r.error);
+    if(!r.latest){if(manual)show(esc(t('noReleases')));return;}
+    if(r.newer){const bn=$('#updbanner');bn.hidden=false;bn.textContent=t('newVersion',r.latest)+' · '+t('download');if(manual)show(`${esc(t('newVersion',r.latest))} <button class="btn" data-open-rel>${t('download')}</button>`);}
+    else if(manual)show(esc(t('upToDate',r.current)));
+  }catch(e){if(manual)show(esc(t('updateErr')));}}
+$('#updbanner').addEventListener('click',()=>{if(window.ztgApp)ztgApp.openRelease();});
+$('#setbtn').addEventListener('click',openSettings);$('#helpbtn').addEventListener('click',openShortcuts);
+const FLOATS={lib:openLibrary,snaps:openSnaps,prefs:openPrefs,settings:openSettings,shortcuts:openShortcuts};
+
+/* ---------- 导出到真 Unity：把脚本和一份「怎么做」清单打成 zip ---------- */
+function crc32(b){let crc=-1;for(let i=0;i<b.length;i++){let c=(crc^b[i])&255;for(let k=0;k<8;k++)c=c&1?(c>>>1)^0xEDB88320:c>>>1;crc=(crc>>>8)^c;}return (crc^-1)>>>0;}
+function makeZip(files){const enc=new TextEncoder(),parts=[],central=[];let off=0;
+  for(const f of files){const name=enc.encode(f.name),data=enc.encode(f.data),crc=crc32(data);
+    const h=new DataView(new ArrayBuffer(30));[[0,0x04034b50,4],[4,20,2],[6,0x0800,2],[12,0x21,2],[14,crc,4],[18,data.length,4],[22,data.length,4],[26,name.length,2]].forEach(([o,v,n])=>n===4?h.setUint32(o,v,true):h.setUint16(o,v,true));
+    parts.push(new Uint8Array(h.buffer),name,data);
+    const c=new DataView(new ArrayBuffer(46));[[0,0x02014b50,4],[4,20,2],[6,20,2],[8,0x0800,2],[14,0x21,2],[16,crc,4],[20,data.length,4],[24,data.length,4],[28,name.length,2],[42,off,4]].forEach(([o,v,n])=>n===4?c.setUint32(o,v,true):c.setUint16(o,v,true));
+    central.push(new Uint8Array(c.buffer),name);off+=30+name.length+data.length;}
+  const cs=central.reduce((n,a)=>n+a.length,0),e=new DataView(new ArrayBuffer(22));e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);e.setUint32(12,cs,true);e.setUint32(16,off,true);
+  return new Blob([...parts,...central,new Uint8Array(e.buffer)],{type:'application/zip'});}
+const scriptText=a=>tmplOf(a).lines.map(l=>l.c.map(x=>typeof x==='string'?x:String((a.blanks||{})[x.b]||'/* TODO */')).join('')).join('\n')+'\n';
+function exportGuide(l){const zh=l==='zh',v3=v=>`(${v.map(fmt).join(', ')})`,out=[CHAP.exportIntro[l]];
+  const ms=S.assets.filter(a=>a.type==='material');
+  if(ms.length){out.push(zh?'## 材质\n':'## Materials\n');ms.forEach(m=>out.push(`- ${zh?'项目窗口右键 → 创建 → 材质':'Project window right-click → Create → Material'}: **${m.name}**, Base Map \`${m.color}\`${(m.shader||'URP/Lit')!=='URP/Lit'?` (Shader: ${m.shader})`:''}`));out.push('');}
+  out.push(zh?'## 物体（按层级顺序）\n':'## Objects (in Hierarchy order)\n');
+  const how=o=>{if(o.type==='camera'||o.type==='light'&&o.name===ZTG.tl(l,'nLight'))return zh?'新场景自带':'comes with a new scene';
+    if(SHAPES.includes(o.type))return (zh?'层级右键 → 3D 对象 → ':'Hierarchy right-click → 3D Object → ')+ZTG.tl('en',o.type);
+    if(o.type==='empty')return zh?'层级右键 → 创建空物体':'Hierarchy right-click → Create Empty';
+    if(o.type==='light')return zh?'层级右键 → 灯光 → 方向光':'Hierarchy right-click → Light → Directional Light';
+    if(isUI(o)||o.type==='eventsystem')return zh?'层级右键 → UI → '+o.type.replace('ui',''):'Hierarchy right-click → UI → '+o.type.replace('ui','');
+    if(isModel(o))return zh?`素材库模型（${L(PROPS()[o.model]||{zh:'',en:''})}）：真 Unity 里可以用 Kenney 等免费模型代替`:`Asset Library model (${(PROPS()[o.model]||{}).en}): in real Unity use a free model, e.g. from Kenney`;return o.type;};
+  const walk=(o,d)=>{const ind='  '.repeat(d),m=matOf(o);out.push(`${ind}- **${o.name}** — ${how(o)}${par(o)?(zh?`，放在 ${par(o).name} 下面`:`, as a child of ${par(o).name}`):''}`);
+    if(!isUI(o))out.push(`${ind}  - Position ${v3(o.pos)}, Rotation ${v3(o.rot)}, Scale ${v3(effScale(o))}`);
+    if(m)out.push(`${ind}  - ${zh?'材质':'Material'}: ${m.name}`);
+    if(o.tag&&o.tag!=='Untagged'&&o.type!=='camera')out.push(`${ind}  - Tag: ${o.tag}`);
+    if(MESH_COL[o.type]&&!o.col)out.push(`${ind}  - ${zh?'移除碰撞体':'Remove the collider'}`);if(o.col&&o.col.trigger)out.push(`${ind}  - ${zh?'碰撞体勾选 Is Trigger':'Collider: check Is Trigger'}`);
+    if(o.rb)out.push(`${ind}  - ${zh?'添加组件 → 物理 → 刚体':'Add Component → Physics → Rigidbody'}`);
+    if(o.cc)out.push(`${ind}  - ${zh?'添加组件 → 物理 → 角色控制器':'Add Component → Physics → Character Controller'}`);
+    if(o.agent)out.push(`${ind}  - ${zh?'添加组件 → 导航 → NavMesh 代理':'Add Component → Navigation → NavMesh Agent'}`);
+    if(o.navs)out.push(`${ind}  - ${zh?'添加组件 → NavMesh Surface，点 Bake（需要 AI Navigation 包）':'Add Component → NavMesh Surface, click Bake (needs the AI Navigation package)'}`);
+    o.scripts.forEach(sc=>{const a=asset(sc.asset);if(!a)return;const vals=Object.entries(sc.vals||{}).map(([k,v])=>`${k} = ${Array.isArray(v)?v.map(id=>(asset(id)||{}).name).join(', '):typeof v==='number'?fmt(v):v!=null&&obj(v)?obj(v).name:'None'}`).join('; ');
+      out.push(`${ind}  - ${zh?'把脚本拖上去':'Drag the script onto it'}: ${a.name}${vals?` (${vals})`:''}`);});
+    kids(o).forEach(k=>walk(k,d+1));};
+  S.objs.filter(o=>!par(o)).forEach(o=>walk(o,0));
+  out.push('',zh?'最后：文件 → 保存（Ctrl/Cmd+S），然后按播放试试。':'Finally: File → Save (Ctrl/Cmd+S), then press Play.');
+  return out.join('\n')+'\n';}
+function buildExport(){const files=S.assets.filter(a=>a.type==='script').map(a=>({name:'Assets/Scripts/'+a.name+'.cs',data:scriptText(a)}));
+  files.push({name:'在真Unity里怎么做.md',data:exportGuide('zh')},{name:'HOW_TO_REBUILD_IN_UNITY.md',data:exportGuide('en')});return files;}
+function exportUnity(){const a=document.createElement('a');a.href=URL.createObjectURL(makeZip(buildExport()));a.download='ZeroToGame-Unity.zip';document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},4000);log('info','lExported');toast(t('lExported'));commit();}
+// 调色盘：选一个主色，按配色规则算出 5 个搭配色
+const palBase=new Map();let palScheme='analog';
+function hexToHsl(hex){const [r,g,b]=hex2rgb(hex).map(v=>v/255);const mx=Math.max(r,g,b),mn=Math.min(r,g,b),l=(mx+mn)/2;let h=0,s=0;
+  if(mx!==mn){const d=mx-mn;s=l>.5?d/(2-mx-mn):d/(mx+mn);h=(mx===r?(g-b)/d+(g<b?6:0):mx===g?(b-r)/d+2:(r-g)/d+4)*60;}return [h,s,l];}
+function hslToHex(h,s,l){const f=n=>{const k=(n+h/30)%12,a=s*Math.min(l,1-l);return Math.round((l-a*Math.max(-1,Math.min(k-3,9-k,1)))*255).toString(16).padStart(2,'0');};return '#'+f(0)+f(8)+f(4);}
+function paletteOf(hex,scheme){const [h,s0,l0]=hexToHsl(hex),s=Math.max(.38,s0),l=clamp(l0,.32,.62),H=d=>((h+d)%360+360)%360;
+  if(scheme==='complement')return [hslToHex(h,s,l*.7),hslToHex(h,s,l),hslToHex(h,s*.4,.88),hslToHex(H(180),s,l),hslToHex(H(180),s,l*.7)];
+  if(scheme==='triad')return [hslToHex(h,s,l),hslToHex(H(120),s,l),hslToHex(H(240),s,l),hslToHex(h,s*.35,.86),hslToHex(h,s*.5,.22)];
+  if(scheme==='mono')return [.2,.35,.5,.66,.82].map(v=>hslToHex(h,s,v));
+  return [-40,-20,0,20,40].map(d=>hslToHex(H(d),s,l));}
+function palMats(a){const pal=paletteOf(palBase.get(a.id)||a.color,palScheme);let f=S.assets.find(x=>x.type==='folder'&&x.name==='Palette'&&x.parent===0);if(!f)f=mkAsset('folder','Palette',0);
+  pal.forEach((c,i)=>mkAsset('material',uniqueAssetName('Palette_'+(i+1),f.id),f.id,{color:c}));log('info','lPalMats',pal.length);toast(t('lPalMats',pal.length));commit();}
+function uniqueAssetName(n,pid){let k=n,i=1;while(S.assets.some(x=>x.parent===pid&&x.name===k))k=n+'_'+(++i);return k;}
 
 /* ---------- Scene interaction ---------- */
 let drag=null;
@@ -540,7 +784,7 @@ cv.addEventListener('pointerdown',e=>{
   if(hit&&(e.metaKey||e.ctrlKey||e.shiftKey)){toggleSel(hit);commit();return;}
   if(hit&&!selIds().includes(hit)){select('obj',hit);commit();return;}
   if(!hit&&(!o||S.tool==='w')){drag={t:'orbit',x:e.clientX,y:e.clientY};return;}
-  if(o&&(S.tool==='e'||S.tool==='r')){const tg=topSel().filter(q=>isMesh(q)||q.type==='empty');
+  if(o&&(S.tool==='e'||S.tool==='r')){const tg=topSel().filter(q=>isRender(q)||q.type==='empty');
     if(tg.length)drag={t:S.tool,x:e.clientX,tg,rots:new Map(tg.map(q=>[q.id,q.rot.slice()])),scs:new Map(tg.map(q=>[q.id,effScale(q).slice()]))};}
 });
 addEventListener('mousemove',e=>{if(document.pointerLockElement===cv||(drag&&drag.t==='look')){mdx+=e.movementX;mdy+=e.movementY;}});
@@ -580,7 +824,7 @@ const HINT={
 /* 把引擎能力交给 chapters/ 里的章节文件用 */
 Object.defineProperty(ZTG,'S',{get:()=>S,configurable:true});
 Object.assign(ZTG,{WORDER,WSEL,mkObj,mkAsset,select,P,FL,near,effScale,matOf,mats,asset,makePrefab,spawn,saveScene,ensureMats,instCount,isGray,isOrange,
-  stopPlay,addScript,addRigidbody,setParent:reparent,compileScript,closeCode,bakeNav,
+  stopPlay,addScript,addRigidbody,setParent:reparent,compileScript,closeCode,bakeNav,inCameraView,setSetting,buildExport,enterMode,
   codeOpen:()=>codeId,codeDraft:b=>{const el=$(`#modal .blank[data-b="${b}"]`);return el?el.value:'';},codeDirty:()=>codeIsDirty(),hint:HINT});
 
 const CHAP=ZTG.chapters.ch0;
@@ -590,27 +834,52 @@ function stepDone(i){const st=STEPS[i];return st.conds.every(c=>!!c[1]());}
 function winClick(key){if(S.step!==0||S.playing)return;const n=WORDER.find(k=>!S.flags.win.includes(k));if(key!==n)return;S.flags.win.push(key);S.flags.winMsg='win_'+key;commit();}
 function updateFlags(){const c=instCount();S.flags.maxInst=Math.max(S.flags.maxInst,c);const p=P();
   if(p&&p.prefab&&S.prefabs[p.prefab]&&S.prefabs[p.prefab].scale[0]>=1.5&&c>=3)S.flags.wide=true;}
+// 提示分级：先只有发亮的边框；点「给我提示」出文字；再点「指给我看」出箭头；最后才有「帮我做这一步」。卡住 25 秒自动升一级。
+let hintLv=0,hintT=0,hintStep=-1,quiz=null;const bugHintOpen=new Set();
+const effLv=()=>SET.hints==='always'?2:hintLv;
+function freeGuide(){return `<div class="gbody"><div class="gstep">${t('freeTitle')}</div><h2>${t('freeTitle')}</h2><p>${esc(t('freeIntro'))}</p><p><b>${t('freeIdeasT')}</b></p><ul class="ideas">${t('freeIdeas').map(x=>`<li>${esc(x)}</li>`).join('')}</ul><div class="hint">${esc(t('freeTip'))}</div></div>`;}
+const bugRes=()=>CHAP.bugs.list.map(b=>{try{return !!b.check();}catch(e){return false;}});
+const bugSig=()=>'bugs|'+bugRes().join('')+'|'+[...bugHintOpen].join(',');
+function bugsGuide(){const B=CHAP.bugs.list,res=bugRes(),all=res.every(Boolean);
+  return `<div class="gbody"><div class="gstep">${t('chN',0)}</div><h2>${t('bugsTitle')}</h2><p>${esc(t('bugsIntro'))}</p><ul class="conds">${B.map((b,i)=>`<li class="${res[i]?'done':''}"><span class="chk"></span><span>${esc(L(b.title))}${!res[i]?(bugHintOpen.has(i)?`<div class="hint" style="margin-top:4px">${esc(L(b.hint))}</div>`:` <button class="btn quiet small" data-act="bughint" data-i="${i}">${t('bugHint')}</button>`):''}</span></li>`).join('')}</ul>
+  ${all?`<div class="winmsg">${esc(t('bugsDone'))}</div><div class="gact"><button class="btn primary" data-act="reset">${t('bugsAgain')}</button><button class="btn quiet" data-act="home">${t('backHome')}</button></div>`:''}</div>`;}
+function quizHTML(){const Q=CHAP.quiz,n=Q.length;
+  if(quiz.i>=n){const best=Math.max(quiz.score,+(lsGet('ztg.ch0.quiz')||0));lsSet('ztg.ch0.quiz',String(best));
+    return `<div class="gstep">${t('quizBtn')}</div><h2>${esc(t('quizResult',quiz.score,n))}</h2><p>${esc(t('quizBest',best))}</p><div class="gact"><button class="btn primary" data-act="qagain">${t('quizAgain')}</button><button class="btn quiet" data-act="home">${t('backHome')}</button></div>`;}
+  const q=Q[quiz.i],pk=quiz.picked;
+  return `<div class="gstep">${t('quizQ',quiz.i+1,n)}</div><h2>${esc(L(q.q))}</h2><div class="qopts">${q.o.map((o,k)=>`<button class="qopt${pk==null?'':k===q.a?' right':k===pk?' wrongp':''}" data-act="qa" data-k="${k}"${pk!=null?' disabled':''}>${esc(L(o))}</button>`).join('')}</div>
+    ${pk!=null?`<div class="${pk===q.a?'winmsg':'hint'}"><b>${t(pk===q.a?'correct':'wrong')}</b> ${esc(L(q.w))}</div><div class="gact"><button class="btn primary" data-act="qnext">${t(quiz.i===n-1?'seeResult':'nextQ')}</button></div>`:''}`;}
 function renderGuide(){
   const g=$('#guide-body');
-  if(S.step>=STEPS.length){markDone();g.innerHTML=`<div class="gbody">${L(CHAP.finish)}</div>`;return;}
+  if(MODE==='free'){g.innerHTML=freeGuide();linkTerms($('.gbody',g));S.sig='free';return;}
+  if(MODE==='bugs'){g.innerHTML=bugsGuide();linkTerms($('.gbody',g));S.sig=bugSig();return;}
+  if(S.step>=STEPS.length){markDone();g.innerHTML=`<div class="gbody">${quiz?quizHTML():L(CHAP.finish)}</div>`;return;}
+  if(hintStep!==S.step){hintStep=S.step;hintLv=0;hintT=performance.now();}
+  const lv=effLv();
   const st=STEPS[S.step];const res=st.conds.map(c=>!!c[1]());const done=res.every(Boolean);
   g.innerHTML=`<div class="gbody"><div class="gstep">${t('stepOf',S.step+1,STEPS.length)}</div><div class="gbar"><i style="width:${(S.step+(done?1:0))/STEPS.length*100}%"></i></div>
   <h2>${esc(L(st.title))}</h2><p>${L(st.body)}</p>${S.step===0&&S.flags.winMsg?`<div class="winmsg">${esc(t(S.flags.winMsg))}</div>`:''}
   <ul class="conds">${st.conds.map((c,i)=>`<li class="${res[i]?'done':''}"><span class="chk"></span><span>${esc(L(c[0]))}</span></li>`).join('')}</ul>
-  ${st.hint?`<div class="hint">${esc(L(st.hint))}</div>`:''}${st.note&&done?`<div class="note">${esc(L(st.note))}</div>`:''}
-  <div class="gact"><button class="btn primary" data-act="next" ${done?'':'disabled'}>${t(S.step===STEPS.length-1?'finishCh':'next')}</button><button class="btn quiet" data-act="auto">${t('auto')}</button></div></div>`;
+  ${st.hint&&lv>=1?`<div class="hint">${esc(L(st.hint))}</div>`:''}${st.note&&done?`<div class="note">${esc(L(st.note))}</div>`:''}
+  <div class="gact"><button class="btn primary" data-act="next" ${done?'':'disabled'}>${t(S.step===STEPS.length-1?'finishCh':'next')}</button>${lv>=2?`<button class="btn quiet" data-act="auto">${t('auto')}</button>`:`<button class="btn quiet" data-act="${lv?'hint2':'hint1'}">${t(lv?'hintBtn2':'hintBtn1')}</button>`}</div></div>`;
   linkTerms($('.gbody',g));
   S.sig=S.step+'|'+res.join('')+'|'+S.flags.winMsg;
 }
-function updateGlow(){$$('.glow').forEach(e=>e.classList.remove('glow'));if(S.step>=STEPS.length)return;const st=STEPS[S.step];if(S.step>0&&stepDone(S.step))return;
+function updateGlow(){$$('.glow').forEach(e=>e.classList.remove('glow'));if(MODE!=='ch0'||S.step>=STEPS.length)return;const st=STEPS[S.step];if(S.step>0&&stepDone(S.step))return;
   st.glow().forEach(s=>$$(s).forEach(e=>e.classList.add('glow')));}
-function checkGuide(){updateFlags();if(S.step>=STEPS.length)return;const st=STEPS[S.step];const sig=S.step+'|'+st.conds.map(c=>!!c[1]()).join('')+'|'+S.flags.winMsg;
-  if(sig!==S.sig){renderGuide();updateGlow();}}
+function checkGuide(){updateFlags();if(MODE==='bugs'){if(bugSig()!==S.sig)renderGuide();return;}if(MODE!=='ch0'||S.step>=STEPS.length)return;const st=STEPS[S.step];const sig=S.step+'|'+st.conds.map(c=>!!c[1]()).join('')+'|'+S.flags.winMsg;
+  if(sig!==S.sig){hintT=performance.now();renderGuide();updateGlow();}}
 $('#guide-body').addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
   if(a==='next'&&!b.disabled){S.step++;S.flags.winMsg='';if(S.step<STEPS.length&&STEPS[S.step].enter)STEPS[S.step].enter();commit();}
   else if(a==='auto'){if(S.playing&&!STEPS[S.step].play)stopPlay();STEPS[S.step].auto();commit();}
   else if(a==='reset')reset();
-  else if(a==='home')showHome();});
+  else if(a==='home')showHome();
+  else if(a==='hint1'||a==='hint2'){hintLv=a==='hint1'?1:2;hintT=performance.now();renderGuide();updateHint();}
+  else if(a==='bughint'){bugHintOpen.add(+b.dataset.i);renderGuide();}
+  else if(a==='quiz'||a==='qagain'){quiz={i:0,score:0,picked:null};renderGuide();}
+  else if(a==='qa'&&quiz&&quiz.picked==null){quiz.picked=+b.dataset.k;if(quiz.picked===CHAP.quiz[quiz.i].a)quiz.score++;renderGuide();}
+  else if(a==='qnext'&&quiz){quiz.i++;quiz.picked=null;renderGuide();}
+  else if(a==='export')exportUnity();});
 
 /* ---------- 术语解释：鼠标停在 Prefab、刚体这些词上，弹出一句话 ---------- */
 let termRe=null,termReLang='',termMap=new Map();
@@ -654,10 +923,11 @@ function resolvePt(x){
     return {x:r.left+r.width/2,y:r.top+r.height/2,r,el};}
   return null;}
 function pickHint(){
-  if(!$('#home').hidden||S.step>=STEPS.length)return null;
+  if(!$('#home').hidden||MODE!=='ch0'||S.step>=STEPS.length)return null;
   const st=STEPS[S.step];
   if(stepDone(S.step)){const a=resolvePt('#guide-body [data-act="next"]');return a&&{a,label:t('hNext')};}
   if(S.playing&&!st.play){const a=resolvePt('#playbtn');return a&&{a,label:t('hStopFirst')};}
+  if(effLv()<2)return null;
   let cand=null;
   if(st.point){let list=st.point();list=Array.isArray(list)?list:[list];
     for(const c of list){if(!c)continue;
@@ -709,6 +979,7 @@ function renderChrome(){
   $('#playbtn').classList.toggle('on',S.playing);$('#pausebtn').classList.toggle('on',S.paused);
   $('#banner').hidden=!S.playing;$('#app').classList.toggle('playing',S.playing);
   $('#toolhint').textContent=t(S.tab==='game'?'tipGame':'tip_'+S.tool);
+  $('#toolhint').hidden=S.playing;
 }
 function renderHier(){
   const ids=new Set(selIds()),rows=[];
@@ -742,12 +1013,30 @@ const ck=(tk,bind,on,dis)=>`<label class="ck"><input type="checkbox" ${bind?`dat
 const head=tk=>`<h4><span${tip(tk)}>${t(tk)}</span></h4>`;
 const rmBtn=c=>`<span class="sp"></span><button class="ibtn rm" data-act="rmcomp" data-c="${c}" title="${esc(t('removeComp'))}" aria-label="${esc(t('removeComp'))}">✕</button>`;
 const headRm=(tk,c)=>`<h4><span${tip(tk)}>${t(tk)}</span>${rmBtn(c)}</h4>`;
+const REF_NAME={uislider:'Slider',uitext:'TMP_Text',uiimage:'Image',uibutton:'Button'};
 const PAL=['#ffffff','#c9ccd1','#8a8f98','#4a4d52','#1c1d20','#ff8a1f','#e5484d','#f2c230','#3fbf6a','#2c6bd1','#7a4fd0','#8a5a3b'];
 function scriptHTML(o,s,i){const a=asset(s.asset),tm=a?tmplOf(a):null,nm=a?a.name:t('missing');
   const fields=(tm&&LIB()[a.name]?tm.fields||[]:[]).map(f=>{const v=s.vals?s.vals[f.id]:null;
-    if(f.type==='transform'){const tg=v!=null?obj(v):null;return `<div class="vrow"><label>${esc(f.label)}</label><div class="slot objref${tg?'':' none'}" data-drop="ref:${o.id}:${i}:${f.id}" title="${esc(t('dropObj'))}">${tg?objIcon(tg,12)+' '+esc(tg.name):esc(t('noneTransform'))}${tg?`<span class="sp"></span><button class="ibtn rm" data-act="clrref" data-i="${i}" data-f="${f.id}" aria-label="✕">✕</button>`:''}</div></div>`;}
+    if(f.type==='transform'||f.type==='ref'){const tg=v!=null?obj(v):null;const none=f.type==='ref'?`None (${REF_NAME[f.accept]||'Object'})`:t('noneTransform');
+      return `<div class="vrow"><label>${esc(f.label)}</label><div class="slot objref${tg?'':' none'}" data-drop="ref:${o.id}:${i}:${f.id}" title="${esc(t('dropObj'))}">${tg?objIcon(tg,12)+' '+esc(tg.name):esc(none)}${tg?`<span class="sp"></span><button class="ibtn rm" data-act="clrref" data-i="${i}" data-f="${f.id}" aria-label="✕">✕</button>`:''}</div></div>`;}
+    if(f.type==='assetlist'){const list=(v||[]).map(id=>asset(id));
+      return `<div class="vrow"><label>${esc(f.label)} <span class="tag">${list.length}</span></label><div class="slot alist" data-drop="alist:${o.id}:${i}:${f.id}">${list.length?list.map((it,k)=>`<span class="chip">${it?assetIcon(it,12)+' '+esc(it.name):'Missing'}<button class="ibtn rm" data-act="rmlist" data-i="${i}" data-f="${f.id}" data-k="${k}" aria-label="✕">✕</button></span>`).join(''):`<span class="none">${esc(t('listEmpty'))}</span>`}</div></div>`;}
     return `<div class="vrow"><label>${esc(f.label)}</label><div class="vin" style="max-width:110px"><input inputmode="decimal" data-bind="fv.${i}.${f.id}" value="${fmt(v==null?f.def:v)}" aria-label="${esc(f.label)}"></div></div>`;}).join('');
   return `<div class="comp"><h4><input type="checkbox" data-bind="en.${i}" ${s.enabled?'checked':''} aria-label="${t('enabled')}"> ${esc(t('scriptCompN',nice(nm)))}${rmBtn('script:'+i)}</h4><div class="kv">${t('script')}<b>${esc(nm)}</b></div>${fields}</div>`;}
+// UI 物体用「矩形变换」：锚点 + 位置 + 宽高（1920×1080 参考分辨率里的像素）
+function uiInsp(o){
+  if(o.type==='canvas')return `<div class="comp">${head('rectTransform')}<div class="kv">${t('width')}<b>1920</b></div><div class="kv">${t('height')}<b>1080</b></div></div>
+    <div class="comp">${head('canvasComp')}${kv('renderMode','Screen Space - Overlay')}</div><div class="comp">${head('canvasScaler')}${kv('scaleMode','Scale With Screen Size')}${kv('refRes','1920 × 1080')}</div>`;
+  if(!isUI(o)||!o.ui)return '';const u=o.ui;
+  const num=(tk,b,v)=>`<div class="vrow"><label>${t(tk)}</label><div class="vin"><input inputmode="decimal" data-bind="${b}" value="${fmt(v)}" aria-label="${t(tk)}"></div></div>`;
+  const col=(tk,b,v)=>`<div class="vrow"><label>${t(tk)}</label><div class="slot"><span class="sw" style="background:${esc(v)}"></span><input class="hexin" data-bind="${b}" value="${esc(v)}" maxlength="7" aria-label="${t(tk)}"></div></div>`;
+  let h=`<div class="comp">${head('rectTransform')}<div class="vrow"><label>${t('anchor')}</label><select class="schemesel" data-bind="anchor" aria-label="${t('anchor')}">${Object.keys(ANCH).map(k=>`<option value="${k}"${k===u.anchor?' selected':''}>${t('a_'+k)}</option>`).join('')}</select></div>
+    <div class="vins2">${num('posX','ux',u.x)}${num('posY','uy',u.y)}${num('width','uw',u.w)}${num('height','uh',u.h)}</div></div>`;
+  if(o.type==='uitext')h+=`<div class="comp">${head('textComp')}<div class="vrow"><label>${t('textField')}</label><textarea class="uitextin" data-bind="utext" rows="2" aria-label="${t('textField')}">${esc(u.text)}</textarea></div>${num('fontSize','usize',u.size)}${col('colorL','ucolor',u.color)}</div>`;
+  if(o.type==='uiimage')h+=`<div class="comp">${head('imageComp')}${col('colorL','ucolor',u.color)}</div>`;
+  if(o.type==='uislider')h+=`<div class="comp">${head('sliderComp')}${num('valueL','uval',u.value)}${col('fillColor','ufill',u.fill)}${col('colorL','ucolor',u.color)}</div>`;
+  if(o.type==='uibutton')h+=`<div class="comp">${head('buttonComp')}<div class="vrow"><label>${t('textField')}</label><input class="hexin" data-bind="utext" value="${esc(u.text)}" aria-label="${t('textField')}"></div>${col('colorL','ucolor',u.color)}</div>`;
+  return h;}
 function renderInsp(){
   const b=$('#insp-body');const o=selObj(),a=selAsset(),os=selObjs();
   if(os.length>1){
@@ -766,17 +1055,21 @@ function renderInsp(){
     <div class="tagrow"><label><span${tip('tag')}>${t('tag')}</span><select data-bind="tag">${TAGS.map(x=>`<option${x===o.tag?' selected':''}>${x}</option>`).join('')}</select></label>
     <label><span${tip('layer')}>${t('layer')}</span><select data-bind="layer">${LAYERS.map(x=>`<option${x===o.layer?' selected':''}>${x}</option>`).join('')}</select></label></div>
     ${o.prefab?`<div style="margin-top:6px;color:var(--accent);font-size:12px">${IC.cube(12)} <span${tip('prefabInst')}>${t('prefabInst')}</span><span class="tag">${esc((S.prefabs[o.prefab]||{}).name||'')}</span></div>`:''}</div>
-    <div class="comp">${head('transform')}${vec('position','pos',o.pos.map(fmt))}${vec('rotation','rot',o.rot.map(fmt))}${vec('scale','scl',sc.map(fmt),o.prefab&&!o.scaleOverride?`<span class="tag">${t('fromPrefab')}</span>`:'')}</div>
+    ${uiInsp(o)||`<div class="comp">${head('transform')}${vec('position','pos',o.pos.map(fmt))}${vec('rotation','rot',o.rot.map(fmt))}${vec('scale','scl',sc.map(fmt),o.prefab&&!o.scaleOverride?`<span class="tag">${t('fromPrefab')}</span>`:'')}</div>`}
+    ${o.type==='eventsystem'?`<div class="comp">${head('eventSystem')}<div class="kv">Input System UI Input Module</div></div>`:''}
     ${o.type==='camera'?`<div class="comp">${head('camera')}${kv('clearFlags',t('skybox'))}${kv('fov','60')}${kv('projection',t('perspective'))}</div>`:''}
     ${o.type==='light'?`<div class="comp">${head('light')}${kv('type',t('directional'))}${kv('intensity','1')}</div>`:''}
+    ${isModel(o)?`<div class="comp">${head('meshRenderer')}<label style="font-size:11px;color:var(--muted)">${t('modelMat')}</label><div class="slot" data-drop="obj:${o.id}">${m?`<span class="sw" style="background:${esc(m.color)}"></span>${esc(m.name)}`:esc(L(PROPS()[o.model]||{zh:'',en:''}))}</div></div>`:''}
     ${isMesh(o)?`<div class="comp">${head('meshRenderer')}<label style="font-size:11px;color:var(--muted)">${t('matSlot')}</label><div class="slot" data-drop="obj:${o.id}"><span class="sw" style="background:${m?esc(m.color):'#cdcdcd'}"></span>${m?esc(m.name):'Default-Material'}</div></div>`:''}
     ${added.map(x=>x.html).join('')}
     <div class="comp addc"><button class="btn" id="addcomp" data-act="addcomp" data-plus="1"${tip('addComponent')}>${t('addComponent')}</button></div>`;
   }else if(a){
     let inner=`<div class="comp"><input class="nameinput" data-bind="aname" value="${esc(a.name)}" aria-label="${t('fileName')}"></div>`;
-    if(a.type==='material')inner+=`<div class="comp">${head('material')}${kv('shader','URP / Lit')}<div class="vrow"><label${tip('baseMap')}>${t('baseMap')}</label><div class="slot"><span class="sw" style="background:${esc(a.color)}"></span><span style="font-family:var(--mono)">${esc(a.color)}</span></div></div><div class="pal">${PAL.map(c=>`<button data-act="color" data-c="${c}" style="background:${c}" aria-label="${t('colorAria',c)}"></button>`).join('')}</div><input class="hexin" data-bind="hex" value="${esc(a.color)}" aria-label="${t('hexAria')}" maxlength="7"></div>`;
+    if(a.type==='material')inner+=`<div class="comp">${head('material')}<div class="kv"><span${tip('shader')}>${t('shader')}</span><select class="schemesel" data-bind="shader" aria-label="${t('shader')}">${['URP/Lit','URP/Unlit','Standard'].map(x=>`<option value="${x}"${x===(a.shader||'URP/Lit')?' selected':''}>${x==='Standard'?esc(t('shaderStd')):x}</option>`).join('')}</select></div><div class="vrow"><label${tip('baseMap')}>${t('baseMap')}</label><div class="slot"><span class="sw" style="background:${esc(a.color)}"></span><span style="font-family:var(--mono)">${esc(a.color)}</span></div></div><div class="pal">${PAL.map(c=>`<button data-act="color" data-c="${c}" style="background:${c}" aria-label="${t('colorAria',c)}"></button>`).join('')}</div><input class="hexin" data-bind="hex" value="${esc(a.color)}" aria-label="${t('hexAria')}" maxlength="7"></div>
+      <div class="comp"><h4>${t('palette')}<span class="sp"></span><select class="schemesel" data-bind="scheme" aria-label="${t('palette')}">${['analog','complement','triad','mono'].map(k=>`<option value="${k}"${k===palScheme?' selected':''}>${t(k)}</option>`).join('')}</select></h4><div class="pal palgen">${paletteOf(palBase.get(a.id)||a.color,palScheme).map(c=>`<button data-act="color" data-c="${c}" style="background:${c}" aria-label="${t('colorAria',c)}" title="${c}"></button>`).join('')}</div><button class="btn" data-act="palmats">${t('palMats')}</button></div>`;
     else if(a.type==='script'){const st=!a.comp?`<div class="kv">${t('notCompiled')}</div>`:a.comp.ok?`<div class="kv okc">${t('scriptOk')}</div>`:`<div class="kv bad">${t('scriptErrs',a.comp.errs.length)}</div>`;
       inner+=`<div class="comp">${head('monoscript')}${st}<button class="btn" data-act="openscript" data-id="${a.id}">${t('openCode')}</button>${!LIB()[a.name]?`<div class="warnbox">${esc(t('nameMismatch',a.name))}</div>`:''}</div>`;}
+    else if(a.type==='itemdata')inner+=`<div class="comp">${head('itemDataT')}<div class="vrow"><label>${t('itemName')}</label><input class="hexin" data-bind="iname" value="${esc(a.itemName||'')}" aria-label="${t('itemName')}"></div><div class="vrow"><label>${t('iconColor')}</label><div class="slot"><span class="sw" style="background:${esc(a.color)}"></span><input class="hexin" data-bind="icolor" value="${esc(a.color)}" maxlength="7" aria-label="${t('iconColor')}"></div></div>${ck('stackable','istack',a.stackable)}<div class="vrow"><label>${t('maxStack')}</label><div class="vin" style="max-width:110px"><input inputmode="decimal" data-bind="imax" value="${a.maxStack}" aria-label="${t('maxStack')}"></div></div></div>`;
     else if(a.type==='prefab'){const pf=S.prefabs[a.prefabId];inner+=`<div class="comp">${head('prefabAsset')}${kv('instances',S.objs.filter(x=>x.prefab===a.prefabId).length)}${pf?vec('pscl','pscl',pf.scale.map(fmt)):''}</div>`;}
     else inner+=`<div class="comp">${kv('type',t(a.type==='folder'?'folder':'sceneT'))}</div>`;
     b.innerHTML=inner;
@@ -787,17 +1080,28 @@ function syncInspector(){const o=selObj(),a=selAsset(),tg=selIds().length>1?selO
     if(tg.length&&(k==='pos'||k==='rot'||k==='scl'))v=mixed(tg,q=>k==='pos'?q.pos:k==='rot'?q.rot:effScale(q))[i];
     else if(o&&k==='fv'&&o.scripts[i]&&o.scripts[i].vals&&typeof o.scripts[i].vals[f]==='number')v=fmt(o.scripts[i].vals[f]);
     else if(a&&k==='pscl'&&S.prefabs[a.prefabId])v=fmt(S.prefabs[a.prefabId].scale[i]);
+    else if(o&&o.ui&&k==='uval')v=fmt(o.ui.value);
     if(v!=null&&inp.value!==v)inp.value=v;});}
 $('#insp-body').addEventListener('change',e=>{const el=e.target,b=el.dataset.bind;if(!b)return;const [k,i,f]=b.split('.');const o=selObj(),a=selAsset();
   const tg=selIds().length>1?selObjs():(o?[o]:[]);
   const num=parseFloat(String(el.value).replace(',','.'));
   if(k==='name'&&o)o.name=el.value||o.name;else if(k==='aname'&&a){a.name=(el.value||a.name).replace(/[\/\\]/g,'');a.comp=null;}
-  else if(k==='hex'&&a){if(/^#[0-9a-f]{6}$/i.test(el.value))a.color=el.value.toLowerCase();}
+  else if(k==='hex'&&a){if(/^#[0-9a-f]{6}$/i.test(el.value)){a.color=el.value.toLowerCase();palBase.set(a.id,a.color);}}
+  else if(k==='scheme'){palScheme=el.value;}
+  else if(k==='shader'&&a){a.shader=el.value;}
   else if(o&&k==='tag')o.tag=el.value;else if(o&&k==='layer')o.layer=el.value;
   else if(o&&k==='en'){o.scripts[+i].enabled=el.checked;}
   else if(o&&o.col&&k==='trig'){o.col.trigger=el.checked;}
   else if(o&&o.rb&&k==='rbg'){o.rb.useGravity=el.checked;}
   else if(o&&o.rb&&k==='rbk'){o.rb.isKinematic=el.checked;}
+  else if(o&&o.ui&&k==='anchor')o.ui.anchor=el.value;
+  else if(o&&o.ui&&k==='utext')o.ui.text=el.value;
+  else if(o&&o.ui&&(k==='ucolor'||k==='ufill')){if(/^#[0-9a-f]{6}$/i.test(el.value))o.ui[k==='ucolor'?'color':'fill']=el.value.toLowerCase();}
+  else if(o&&o.ui&&['ux','uy','uw','uh','usize','uval'].includes(k)){if(!isNaN(num))o.ui[{ux:'x',uy:'y',uw:'w',uh:'h',usize:'size',uval:'value'}[k]]=k==='uval'?clamp(num,0,1):num;}
+  else if(a&&k==='iname')a.itemName=el.value;
+  else if(a&&k==='icolor'){if(/^#[0-9a-f]{6}$/i.test(el.value))a.color=el.value.toLowerCase();}
+  else if(a&&k==='istack')a.stackable=el.checked;
+  else if(a&&k==='imax'){if(!isNaN(num))a.maxStack=Math.max(1,Math.round(num));}
   else if(!isNaN(num)){
     for(const q of tg){if(k==='pos')q.pos[+i]=num;else if(k==='rot')q.rot[+i]=num;
       else if(k==='scl'){if(!q.scaleOverride){q.scale=effScale(q).slice();q.scaleOverride=true;}q.scale[+i]=num;}}
@@ -809,11 +1113,13 @@ $('#insp-body').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagN
 $('#insp-body').addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const a=selAsset(),o=selObj(),act=b.dataset.act;
   if(act==='color'&&a){a.color=b.dataset.c;commit();}
   else if(act==='openscript')openCode(+b.dataset.id);
+  else if(act==='palmats'&&a)palMats(a);
   else if(act==='addcomp'){const r=b.getBoundingClientRect();openMenu(itemsComp(),r.left,r.bottom+2);}
   else if(act==='rmcomp')removeComp(o,b.dataset.c);
   else if(act==='bake'&&o&&o.navs)bakeNav(o);
   else if(act==='clearnav'&&o&&o.navs){o.navs.baked=null;log('info','lNavCleared');commit();}
-  else if(act==='clrref'&&o){const s=o.scripts[+b.dataset.i];if(s&&s.vals)s.vals[b.dataset.f]=null;commit();}});
+  else if(act==='clrref'&&o){const s=o.scripts[+b.dataset.i];if(s&&s.vals)s.vals[b.dataset.f]=null;commit();}
+  else if(act==='rmlist'&&o){const s=o.scripts[+b.dataset.i];if(s&&s.vals&&s.vals[b.dataset.f])s.vals[b.dataset.f].splice(+b.dataset.k,1);commit();}});
 
 function commit(){trackUndo();S.dirty=snapJson()!==S.savedJson;updateFlags();renderChrome();renderHier();renderProj();renderInsp();renderGuide();updateGlow();updateHint();saveProgress();}
 
@@ -828,12 +1134,16 @@ const hierMenu=(x,y,e)=>{const r=e.target.closest&&e.target.closest('[data-obj]'
 $('#hier-body').addEventListener('contextmenu',e=>{e.preventDefault();hierMenu(e.clientX,e.clientY,e);});longPress($('#hier-body'),(x,y,e)=>hierMenu(x,y,e));
 $('#hier-plus').dataset.plus='1';$('#hier-plus').addEventListener('click',e=>{const r=e.currentTarget.getBoundingClientRect();openMenu(items3D(),r.left,r.bottom+2);});
 $('#proj-plus').dataset.plus='1';$('#proj-plus').addEventListener('click',e=>{const r=e.currentTarget.getBoundingClientRect();openMenu(itemsCreate(),r.left,r.bottom+2);});
+// 双击自己判断：第一下点击会重画项目窗口，浏览器的 dblclick 事件因此不会触发
+let lastTile={id:null,t:0};
+function openAsset(a){if(a.type==='folder'){S.cwd=a.id;select(null);commit();}else if(a.type==='script')openCode(a.id);}
 $('#proj-body').addEventListener('click',e=>{
   const ln=e.target.closest('[data-sa]');if(ln){openCode(+ln.dataset.sa,+ln.dataset.sl);return;}
   const bt=e.target.closest('[data-act="cwd"]');if(bt){S.cwd=+bt.dataset.id;commit();return;}
-  const el=e.target.closest('[data-asset]');if(el&&S.renaming!==+el.dataset.asset){select('asset',+el.dataset.asset);commit();}});
-$('#proj-body').addEventListener('dblclick',e=>{const el=e.target.closest('[data-asset]');if(!el)return;const a=asset(+el.dataset.asset);if(!a)return;
-  if(a.type==='folder'){S.cwd=a.id;select(null);commit();}else if(a.type==='script')openCode(a.id);});
+  const el=e.target.closest('[data-asset]');if(!el||S.renaming===+el.dataset.asset)return;
+  const id=+el.dataset.asset,now=performance.now();
+  if(lastTile.id===id&&now-lastTile.t<450){lastTile={id:null,t:0};const a=asset(id);if(a)openAsset(a);return;}
+  lastTile={id,t:now};select('asset',id);commit();});
 const projMenu=(x,y,e)=>{const el=e.target.closest&&e.target.closest('[data-asset]');
   if(el){const a=asset(+el.dataset.asset);select('asset',a.id);commit();openMenu([{tk:'rename',k:'rename',fn:()=>{S.renaming=a.id;commit();setTimeout(()=>{const r=$('#rn');if(r){r.focus();r.select();}},0);}},{tk:'del',k:'del',fn:deleteSel}],x,y);}
   else openMenu(itemsCreate(),x,y);};
@@ -860,14 +1170,21 @@ document.addEventListener('pointerup',e=>endDnD(e,true),true);document.addEventL
 document.addEventListener('click',e=>{if(suppress){e.stopPropagation();e.preventDefault();}},true);
 function performDrop(pl,tgt,x,y){const [kind,ids]=pl.split(':');const id=+ids;const dz=tgt&&tgt.closest('[data-drop]');if(!dz)return;const dv=dz.dataset.drop;
   if(kind==='asset'){const a=asset(id);if(!a)return;
+    if(dv.startsWith('alist:')){const [,oid,si,fid]=dv.split(':');const host=obj(+oid),s=host&&host.scripts[+si];if(!s)return;
+      if(a.type!=='itemdata'){log('warn','lWrongRef','ItemData');toast(t('lWrongRef','ItemData'));commit();return;}
+      s.vals=s.vals||{};(s.vals[fid]=s.vals[fid]||[]).push(a.id);commit();return;}
     if(dv.startsWith('obj:'))applyAsset(a,obj(+dv.slice(4)));
     else if(dv==='scene'&&S.tab==='scene'){const r=cv.getBoundingClientRect(),cx=x-r.left,cy=y-r.top;
-      if(a.type==='prefab')spawn(a,groundPt(cx,cy)||[0,.5,0]);else{const hit=pickAt(cx,cy);if(hit)applyAsset(a,obj(hit));else log('warn','lMissed'),commit();}}
+      if(a.type==='prefab')spawn(a,groundPt(cx,cy)||[0,.5,0]);else if(a.type==='model')spawnModel(a,groundPt(cx,cy));else{const hit=pickAt(cx,cy);if(hit)applyAsset(a,obj(hit));else log('warn','lMissed'),commit();}}
     else if((dv==='hier'||dv==='hroot')&&a.type==='prefab')spawn(a);
+    else if((dv==='hier'||dv==='hroot')&&a.type==='model')spawnModel(a);
     else if(dv.startsWith('folder:'))moveAsset(a,+dv.slice(7));else if(dv==='proj')moveAsset(a,S.cwd);}
   else if(kind==='obj'){const o=obj(id);if(!o)return;
     // 把物体拖到脚本的 Transform 格子上 = 指定 target
-    if(dv.startsWith('ref:')){const [,oid,si,fid]=dv.split(':');const host=obj(+oid),s=host&&host.scripts[+si];if(s){s.vals=s.vals||{};s.vals[fid]=o.id;commit();}return;}
+    if(dv.startsWith('ref:')){const [,oid,si,fid]=dv.split(':');const host=obj(+oid),s=host&&host.scripts[+si];if(!s)return;
+      const f=(tmplOf(asset(s.asset)||{name:''}).fields||[]).find(x=>x.id===fid);
+      if(f&&f.type==='ref'&&f.accept&&o.type!==f.accept){log('warn','lWrongRef',REF_NAME[f.accept]);toast(t('lWrongRef',REF_NAME[f.accept]));commit();return;}
+      s.vals=s.vals||{};s.vals[fid]=o.id;commit();return;}
     const movers=selIds().includes(o.id)?topSel():[o];
     // 在层级里把物体拖到另一个物体上 = 变成它的子物体；拖到空白处 = 取消父子关系
     if(dv.startsWith('obj:')){const p=obj(+dv.slice(4));if(!p||movers.includes(p))return;
@@ -925,11 +1242,12 @@ function runViz(moving,looking){if(codeId==null)return;const a=asset(codeId);if(
 
 /* ---------- menus, play, keys ---------- */
 const MENUS={
-  file:()=>[{tk:'save',k:'save',fn:saveScene},{tk:'saveAs',dis:true}],
+  file:()=>[{tk:'save',k:'save',fn:saveScene},{tk:'saveAs',dis:true},{tk:'exportM',k:'export',fn:exportUnity}],
   edit:()=>[{tk:'undo',k:'undo',fn:undo,dis:!undoS.length||S.playing},{tk:'redo',k:'redo',fn:redo,dis:!redoS.length||S.playing},
-    {tk:'dup',k:'dup',fn:duplicateSel,dis:!selIds().length},{tk:'copy',k:'copy',fn:copySel,dis:!selIds().length},{tk:'paste',k:'paste',fn:pasteClip,dis:!clip},{tk:'del',k:'del',fn:deleteSel}],
+    {tk:'dup',k:'dup',fn:duplicateSel,dis:!selIds().length},{tk:'copy',k:'copy',fn:copySel,dis:!selIds().length},{tk:'paste',k:'paste',fn:pasteClip,dis:!clip},{tk:'del',k:'del',fn:deleteSel},
+    {tk:'clearPrefs',k:'clearprefs',fn:()=>{prefsSet({});log('info','lPrefsCleared');toast(t('lPrefsCleared'));commit();if(floatId==='prefs')openPrefs();}}],
   go:()=>items3D(),
-  window:()=>[{tk:'layouts',k:'layouts',children:[{tk:'default',k:'default',fn:()=>{S.tab='scene';commit();toast(t('layoutReset'));}}]}]};
+  window:()=>[{tk:'libraryM',k:'library',fn:openLibrary},{tk:'snapsM',k:'snaps',fn:openSnaps},{tk:'prefsM',k:'prefs',fn:openPrefs},{tk:'settingsM',k:'settings',fn:openSettings},{tk:'shortcutsM',k:'shortcuts',fn:openShortcuts},{tk:'layouts',k:'layouts',children:[{tk:'default',k:'default',fn:()=>{S.tab='scene';commit();toast(t('layoutReset'));}}]}]};
 $$('.mbtn').forEach(b=>b.addEventListener('click',()=>{const was=b.classList.contains('open');closeMenu();if(was)return;const r=b.getBoundingClientRect();b.classList.add('open');openMenu(MENUS[b.dataset.menu](),r.left,r.bottom+2);b.classList.add('open');}));
 function startPlay(){if(S.playing)return;
   S.assets.forEach(a=>{const tm=a.type==='script'&&LIB()[a.name];if(tm&&!tm.blanks.length&&!a.comp)compileScript(a);});
@@ -937,7 +1255,8 @@ function startPlay(){if(S.playing)return;
   S.snap=snapJson();S.playing=true;S.paused=false;S.tab='game';S.flags.played=true;S.flags.playDist=0;vel.clear();playErr.clear();agentState.clear();trigIn=new Set();mdx=mdy=0;updCount=0;codeHot=performance.now()+900;log('info','lPlay');
   // Start()：Debug.Log 把空格里写的那句话打印到控制台，点它会跳到那一行
   for(const o of S.objs)for(const s of o.scripts){const a=asset(s.asset);const tm=a&&LIB()[a.name];if(!s.enabled||!tm||!a.comp||!a.comp.ok)continue;
-    const ln=blankPos('msg',{},tm).line;if(ln>=0)S.logs.push({t:now8(),k:'raw',a:[a.comp.rt.msg],type:'info',src:{a:a.id,l:ln}});}
+    const ln=blankPos('msg',{},tm).line;if(ln>=0)S.logs.push({t:now8(),k:'raw',a:[a.comp.rt.msg],type:'info',src:{a:a.id,l:ln}});
+    if(tm.kind==='inventory')startInventory(o,s,a,tm);}
   commit();}
 function stopPlay(){if(!S.playing)return;const [objs,prefabs]=JSON.parse(S.snap);S.objs=objs;S.prefabs=prefabs;S.playing=false;S.paused=false;
   if(document.pointerLockElement)document.exitPointerLock();trigIn=new Set();agentState.clear();
@@ -946,15 +1265,30 @@ function stopPlay(){if(!S.playing)return;const [objs,prefabs]=JSON.parse(S.snap)
   lastModel=modelJson();log('info','lStop');commit();}
 $('#playbtn').addEventListener('click',()=>S.playing?stopPlay():startPlay());
 $('#pausebtn').addEventListener('click',()=>{if(!S.playing)return;S.paused=!S.paused;commit();});
-function reset(){closeMenu();closeCode();clearProgress();init();commit();}
+function setupMode(){if(MODE==='bugs'){CHAP.bugs.setup();S.savedJson=snapJson();resetUndo();}}
+function reset(){closeMenu();closeCode();closeFloat();clearProgress();quiz=null;bugHintOpen.clear();init();setupMode();commit();}
+const chapTag=()=>MODE==='free'?t('freeTitle'):MODE==='bugs'?t('chN',0)+' · '+t('bugsTitle'):t('chN',0)+' · '+L(CHAP.title);
+function enterMode(m){if(MODE===m)return;if(S.playing)stopPlay();closeMenu();closeCode();closeFloat();saveNow();
+  MODE=m;quiz=null;bugHintOpen.clear();hintStep=-1;if(!loadProgress()){init();setupMode();}
+  $('#chaptag').textContent=chapTag();commit();}
 const DONE_KEY='ztg.ch0.done';
 function readDone(){try{return localStorage.getItem(DONE_KEY)==='1';}catch(e){return false;}}
 function markDone(){try{localStorage.setItem(DONE_KEY,'1');}catch(e){}}
-function showHome(){if(S.playing)stopPlay();closeMenu();closeCode();const st=$('#chap0st');const d=readDone();
-  st.textContent=S.step>0&&S.step<STEPS.length?t('cont',S.step+1):d?t('doneAgain'):t('start');st.classList.toggle('done',d&&!(S.step>0&&S.step<STEPS.length));$('#home').hidden=false;updateHint();}
+function showHome(){if(S.playing)stopPlay();closeMenu();closeCode();closeFloat();saveNow();const st=$('#chap0st');const d=readDone(),step=MODE==='ch0'?S.step:peekStep('ch0');
+  st.textContent=step>0&&step<STEPS.length?t('cont',step+1):d?t('doneAgain'):t('start');st.classList.toggle('done',d&&!(step>0&&step<STEPS.length));
+  const bb=$('#chapbugs');bb.disabled=!d;bb.classList.toggle('locked',!d);$('#chapbugsst').textContent=d?t('open'):t('lockedCh0');
+  $('#home').hidden=false;updateHint();}
 $('#homebtn').addEventListener('click',showHome);
-$('#chap0').addEventListener('click',()=>{if(S.step>=STEPS.length)reset();$('#home').hidden=true;resize();updateHint();});
+const openWork=()=>{$('#home').hidden=true;resize();updateHint();};
+$('#chap0').addEventListener('click',()=>{enterMode('ch0');if(S.step>=STEPS.length){quiz=null;reset();}openWork();});
+$('#chapfree').addEventListener('click',()=>{enterMode('free');openWork();});
+$('#chapbugs').addEventListener('click',()=>{if(!readDone())return;enterMode('bugs');openWork();});
 $('#resetbtn').addEventListener('click',reset);
+
+$('#cmpbtn').addEventListener('click',()=>{cmp.on=!cmp.on;$('#cmpbtn').classList.toggle('on',cmp.on);$('#cmpx').hidden=!cmp.on;});
+$('#cmpx').addEventListener('input',e=>{cmp.x=+e.target.value/100;});
+$('#snapbtn').addEventListener('click',takeSnap);
+$('#laybtn').addEventListener('click',()=>{if(S.tab!=='scene'){S.tab='scene';}layoutCheck();});
 
 /* ---------- language ---------- */
 function applyStatic(){
@@ -965,11 +1299,11 @@ function applyStatic(){
   $$('[data-i18n-aria]').forEach(el=>el.setAttribute('aria-label',t(el.dataset.i18nAria)));
   $('#ch0title').textContent=L(CHAP.title);
   $('#ch0desc').textContent=t('ch0desc',STEPS.length);
-  $('#chaptag').textContent=t('chN',0)+' · '+L(CHAP.title);
+  $('#chaptag').textContent=chapTag();
   $$('.langbtn').forEach(b=>{b.textContent=ZTG.lang()==='zh'?'English':'中文';});
 }
 // 切换语言时，还没改过名字的默认物体（主摄像机、立方体 (1)……）跟着换成新语言的名字
-const DEFAULT_NAMES=['nCamera','nLight','nCube','nPlane','nFolder','nMaterial','nSphere','nCapsule','nCylinder','nQuad','nEmpty'];
+const DEFAULT_NAMES=['nCamera','nLight','nCube','nPlane','nFolder','nMaterial','nSphere','nCapsule','nCylinder','nQuad','nEmpty','nCanvas','nText','nImage','nSlider','nButton','nEventSystem'];
 function renameDefaults(from,to){
   const pairs=DEFAULT_NAMES.map(k=>[ZTG.tl(from,k),ZTG.tl(to,k)]);
   const ren=x=>{const m=/^(.*?)(\s\(\d+\))?$/.exec(x.name);const p=pairs.find(q=>q[0]===m[1]);if(p)x.name=p[1]+(m[2]||'');};
@@ -985,14 +1319,16 @@ function toggleLang(){
   closeMenu();applyStatic();commit();
   if(!$('#home').hidden)showHome();
   if(codeId!=null)openCode(codeId);
+  if(floatId&&FLOATS[floatId])FLOATS[floatId]();
 }
 $$('.langbtn').forEach(b=>b.addEventListener('click',toggleLang));
 
 addEventListener('keydown',e=>{
   if(!$('#home').hidden)return;
+  if(e.key==='?'&&!/INPUT|TEXTAREA|SELECT/.test((e.target||{}).tagName||'')){openShortcuts();return;}
   const typing=/INPUT|TEXTAREA|SELECT/.test((e.target||{}).tagName||''),mod=e.ctrlKey||e.metaKey,k=e.key.toLowerCase();
   if(mod&&k==='s'){e.preventDefault();if(codeId!=null){saveCode();return;}if(S.playing){toast(t('stopBeforeSave'));return;}saveScene();return;}
-  if(e.key==='Escape'){closeMenu();closeCode();return;}
+  if(e.key==='Escape'){closeMenu();closeCode();closeFloat();return;}
   if(typing)return;
   if(mod&&k==='z'){e.preventDefault();if(e.shiftKey)redo();else undo();return;}
   if(mod&&k==='y'){e.preventDefault();redo();return;}
@@ -1000,7 +1336,7 @@ addEventListener('keydown',e=>{
   if(mod&&k==='c'){copySel();return;}
   if(mod&&k==='v'){pasteClip();return;}
   if(mod&&e.shiftKey&&k==='n'){e.preventDefault();createEmpty();return;}
-  if(S.playing){keys.add(e.code);if(['KeyW','KeyA','KeyS','KeyD'].includes(e.code))e.preventDefault();return;}
+  if(S.playing){if(!e.repeat)pressedNow.add(e.code);keys.add(e.code);if(['KeyW','KeyA','KeyS','KeyD'].includes(e.code))e.preventDefault();return;}
   if('qwer'.includes(k)&&k.length===1&&!mod){S.tool=k;commit();}
   else if(k==='f'){const o=selObj();if(o){V.target=wPos(o);}}
   else if(e.key==='Delete'||e.key==='Backspace'){if(S.sel){e.preventDefault();deleteSel();}}
@@ -1015,9 +1351,13 @@ function frame(ts){const dt=Math.min(.05,(ts-last)/1000||0);last=ts;let moving=f
     COLS=colList();rbPhysics(dt);COLS=colList();if(triggers())S.sig='';}
   else{mdx=mdy=0;}
   draw();runViz(moving,looking);
+  // 卡住一段时间，提示自动升一级
+  if(MODE==='ch0'&&SET.hints!=='always'&&hintLv<2&&S.step<STEPS.length&&$('#home').hidden&&!stepDone(S.step)&&performance.now()-hintT>25000){hintLv++;hintT=performance.now();renderGuide();updateHint();}
   if(ts-lastTick>140){lastTick=ts;if(S.playing||drag){syncInspector();if(S.playing&&S.ptab==='console')renderProj();}checkGuide();updateHint();}
   requestAnimationFrame(frame);}
 new ResizeObserver(resize).observe($('#cwrap'));addEventListener('resize',()=>{resize();hKey='';updateHint();});
 if(!loadProgress())init();
-applyStatic();resize();commit();showHome();requestAnimationFrame(frame);
+applyStatic();applyZoom();resize();commit();showHome();requestAnimationFrame(frame);
+// 桌面 app 里：读版本号；每天最多自动检查一次更新
+if(window.ztgApp){ztgApp.info().then(i=>{appVersion=i.version;}).catch(()=>{});const today=new Date().toISOString().slice(0,10);if(lsGet('ztg.updchk')!==today){lsSet('ztg.updchk',today);checkUpdates(false);}}
 })();

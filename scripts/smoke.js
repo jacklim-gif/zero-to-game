@@ -24,8 +24,10 @@ app.whenReady().then(async () => {
   // 进入第 0 章，并让教练自动完成前 7 步，展示一个做到一半的场景
   await win.webContents.executeJavaScript(`
     document.getElementById('chap0').click();
+    // 提示是分级的：先点「给我提示」「指给我看」，才会出现「帮我做这一步」
+    const auto = () => { for (const k of ['hint1', 'hint2']) document.querySelector('[data-act=' + k + ']')?.click(); document.querySelector('[data-act=auto]').click(); };
     for (let i = 0; i < 7; i++) {
-      document.querySelector('[data-act=auto]').click();
+      auto();
       document.querySelector('[data-act=next]').click();
     }
     document.querySelector('[data-obj]:nth-child(4)')?.click();
