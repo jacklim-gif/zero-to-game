@@ -78,7 +78,7 @@ const FirstPersonMove = {
 
 const EnemyChase = {
   name: 'EnemyChase', kind: 'chase', blanks: [], answers: {}, compile: noBlanks,
-  fields: [{ id: 'target', label: 'Target', type: 'transform', def: null }],
+  fields: [{ id: 'target', label: 'Target', type: 'transform', def: null }, { id: 'startDelay', label: 'Start Delay', type: 'float', def: 3 }],
   lines: [
     { c: ['using UnityEngine;'], x: { zh: '引入 Unity 的工具箱。', en: "Brings in Unity's toolbox." } },
     { c: ['using UnityEngine.AI;'], x: { zh: '引入 AI 导航，用来找路。', en: 'Brings in AI navigation, used for pathfinding.' } },
@@ -86,6 +86,7 @@ const EnemyChase = {
     { c: ['public class EnemyChase : MonoBehaviour'], x: { zh: '追人的怪物。要挂在有 NavMesh Agent 的物体上，场景里要先烘焙 NavMesh。', en: 'A chasing monster. Put it on an object with a NavMesh Agent, and bake a NavMesh in the scene first.' } },
     { c: ['{'] },
     { c: ['    public Transform target;'], err: 'noTarget', x: { zh: '要追谁。public 的 Transform 会在检查器里出现一个空格，把玩家从层级拖进去。', en: 'Who to chase. A public Transform shows up as a slot in the Inspector — drag the player into it from the Hierarchy.' } },
+    { c: ['    public float startDelay = 3f;'], x: { zh: '开始播放后先等几秒才开始追，给玩家一点时间。', en: 'Seconds to wait after Play starts before chasing, to give the player a head start.' } },
     { c: ['    NavMeshAgent agent;'], x: { zh: '用来存导航代理，它会自己沿着能走的路径移动。', en: 'Holds the NavMesh Agent, which moves along walkable paths by itself.' } },
     { c: [''] },
     { c: ['    void Start()'], run: 'start', x: { zh: '开始播放时执行一次。', en: 'Runs once, when Play starts.' } },
@@ -95,6 +96,7 @@ const EnemyChase = {
     { c: [''] },
     { c: ['    void Update()'], run: 'update', x: { zh: '每一帧执行一次。', en: 'Runs once per frame.' } },
     { c: ['    {'], run: 'update' },
+    { c: ['        if (Time.timeSinceLevelLoad < startDelay) return;'], run: 'update', x: { zh: 'Time.timeSinceLevelLoad 是场景开始后过了几秒。还没到 startDelay 就先不动。', en: 'Time.timeSinceLevelLoad is how many seconds since the scene started. Until startDelay has passed, do nothing.' } },
     { c: ['        agent.SetDestination(target.position);'], run: 'move', err: 'chase', x: { zh: '每一帧都告诉代理「目的地是目标现在的位置」，它会自己绕过障碍物走过去。', en: "Every frame, tells the agent “go to where the target is now”. It finds its own way around obstacles." } },
     { c: ['    }'], run: 'update' },
     { c: ['}'] }],

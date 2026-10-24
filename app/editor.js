@@ -431,7 +431,7 @@ function findPath(nv,from,to){const s=nearestOk(nv,...from),g=nearestOk(nv,...to
   return null;}
 
 /* ---------- 脚本在播放时怎么跑（模拟 C#，出错时报和真 Unity 一样的错） ---------- */
-const playErr=new Set(),agentState=new Map(),pressedNow=new Set();let mdx=0,mdy=0,rayInfo=null;
+const playErr=new Set(),agentState=new Map(),pressedNow=new Set();let playT=0;let mdx=0,mdy=0,rayInfo=null;
 function onceErr(a,key,fn){const k=a.id+':'+key;if(playErr.has(k))return;playErr.add(k);fn();}
 const errLine=(tm,e)=>tm.lines.findIndex(l=>l.err===e);
 function nre(a,tm,e,why){onceErr(a,e,()=>{const ln=errLine(tm,e);logSrc('error','lNRE',[a.name+'.cs',ln+1,why],a,ln);});}
@@ -449,6 +449,7 @@ function runFPS(o,s,a,tm,dt){
   const R=wRot(o),f=norm([R[2][0],0,R[2][2]]),r=norm([R[0][0],0,R[0][2]]);let dir=add(mul(r,x),mul(f,z));const l=Math.hypot(dir[0],dir[2]);dir=l?mul(dir,1/l):[0,0,0];
   const mv=ccMove(o,dir,l?s.vals.speed:0,dt)&&l>0;if(mv)walkedNow.add(o.id);return mv;}
 function runChase(o,s,a,tm,dt){
+  if(playT<(s.vals.startDelay==null?3:s.vals.startDelay))return false;
   if(!o.agent){nre(a,tm,'chase','whyNoAgent');return false;}
   const tg=s.vals.target!=null?obj(s.vals.target):null;
   if(!tg){onceErr(a,'target',()=>{const ln=errLine(tm,'noTarget');logSrc('error','lUnassigned',[a.name,'target'],a,ln);});return false;}
@@ -515,7 +516,7 @@ function trigEnter(tr,body){for(const s of tr.scripts){const a=asset(s.asset),tm
     if(body.tag===rt.tag){const st=agentState.get('door'+tr.id)||{};st.open=true;agentState.set('door'+tr.id,st);}}
   else if(tm.kind==='exit'){trigFlash.set(a.id,performance.now()+900);if(body.tag!=='Player')continue;const m=s.vals.message!=null?obj(s.vals.message):null;
     if(!m||!m.ui){unassigned(a,tm,'message','noMsg');continue;}m.ui.text='YOU ESCAPED';S.frozen=true;S.flags.escaped=true;log('info','lTimeScale');}}}
-function runScripts(dt){let moving=false;const ran=new Set();walkedPrev=walkedNow;walkedNow=new Set();
+function runScripts(dt){let moving=false;const ran=new Set();walkedPrev=walkedNow;walkedNow=new Set();playT+=dt;
   for(const o of S.objs)for(const s of o.scripts){const a=asset(s.asset);const tm=a&&LIB()[a.name];if(!s.enabled||!tm||!a.comp||!a.comp.ok)continue;ran.add(a.id);
     if(!s.vals)s.vals={speed:5};
     let mv=false;if(tm.kind==='translate')mv=runPlayerMove(o,s,a,dt);else if(tm.kind==='fps')mv=runFPS(o,s,a,tm,dt);else if(tm.kind==='chase')mv=runChase(o,s,a,tm,dt);
@@ -672,6 +673,8 @@ function draw(){
       const txt=rayInfo.h?t('rayHit',rayInfo.h.o.name,rayInfo.h.d.toFixed(1)):t('rayNone');gctx.font='12px '+getComputedStyle(document.body).fontFamily;const w=gctx.measureText(txt).width+16;
       gctx.fillStyle='rgba(10,12,16,.7)';gctx.fillRect(CW/2-w/2,CH-40,w,22);gctx.fillStyle='#fff';gctx.textAlign='center';gctx.fillText(txt,CW/2,CH-25);
       if(document.pointerLockElement!==cv){gctx.fillStyle='rgba(10,12,16,.7)';const t2=t('clickToLook'),w2=gctx.measureText(t2).width+16;gctx.fillRect(CW/2-w2/2,52,w2,22);gctx.fillStyle="#fff";gctx.fillText(t2,CW/2,67);}}
+    if(S.playing&&S.frozen){gctx.font='14px '+getComputedStyle(document.body).fontFamily;gctx.textAlign='center';const t3=t('frozenTip'),w3=gctx.measureText(t3).width+24;
+      gctx.fillStyle='rgba(10,12,16,.8)';gctx.fillRect(CW/2-w3/2,CH-74,w3,28);gctx.fillStyle='#fff';gctx.fillText(t3,CW/2,CH-55);}
     drawSounds();drawCompare();return;}
   // 场景视图：射线（红线）、导航路径、碰撞体线框（绿）、摄像机和灯的图标、移动箭头
   if(rayInfo){gctx.strokeStyle='#ff5050';gctx.lineWidth=2;gctx.beginPath();line(rayInfo.from,add(rayInfo.from,mul(rayInfo.dir,rayInfo.h?rayInfo.h.d:30)));gctx.stroke();
@@ -951,7 +954,7 @@ let drag=null;
 cv.addEventListener('contextmenu',e=>e.preventDefault());
 cv.addEventListener('pointerdown',e=>{
   winClick(S.tab);
-  if(S.tab==='game'){if(S.playing&&fpsActive()){try{cv.requestPointerLock();}catch(err){}drag={t:'look'};cv.setPointerCapture(e.pointerId);}return;}
+  if(S.tab==='game'){if(document.activeElement&&document.activeElement!==document.body)document.activeElement.blur();if(S.playing&&fpsActive()){try{cv.requestPointerLock();}catch(err){}drag={t:'look'};cv.setPointerCapture(e.pointerId);}return;}
   const r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;cv.setPointerCapture(e.pointerId);
   const o=selObj();
   if(e.button!==0||S.tool==='q'){drag={t:'orbit',x:e.clientX,y:e.clientY};return;}
@@ -1482,7 +1485,8 @@ function startPlay(){if(S.playing)return;
   for(const o of S.objs)for(const s of o.scripts){const a=asset(s.asset);const tm=a&&LIB()[a.name];if(!s.enabled||!tm||!a.comp||!a.comp.ok)continue;
     const ln=blankPos('msg',{},tm).line;if(ln>=0)S.logs.push({t:now8(),k:'raw',a:[a.comp.rt.msg],type:'info',src:{a:a.id,l:ln}});
     if(tm.kind==='inventory')startInventory(o,s,a,tm);}
-  S.frozen=false;stopSounds();walkedNow=new Set();for(const o of S.objs)if(o.audio&&o.audio.awake&&o.audio.clip!=null)playSource(o);
+  // 键盘焦点不要留在检查器的输入框里，不然 W A S D 会打进输入框
+  S.frozen=false;playT=0;stopSounds();walkedNow=new Set();if(document.activeElement&&document.activeElement!==document.body)document.activeElement.blur();for(const o of S.objs)if(o.audio&&o.audio.awake&&o.audio.clip!=null)playSource(o);
   commit();}
 function stopPlay(){if(!S.playing)return;const [objs,prefabs,en]=JSON.parse(S.snap);S.objs=objs;S.prefabs=prefabs;if(en)S.env=en;S.playing=false;S.paused=false;S.frozen=false;stopSounds();
   if(S.flags.hitWall)S.flags.fpsStopped=true;

@@ -153,15 +153,15 @@ const STEPS = [
  {title:T('做玩家：胶囊 + 角色控制器', 'Make the player: capsule + Character Controller'), glow:() => ['#p-hier', '#p-insp'],
   point:() => { const p = P() || G.S.objs.find(o => o.type === 'capsule');
     if (!p) return viaMenu('#hier-plus', ['go3d', 'capsule'], T('点 +，选 3D 对象 → 胶囊', 'Click +, then 3D Object → Capsule'));
-    return nameIt(p, 'Player') || selFirst(p) || fix('pos', [0, 1, -6], p.pos) || (!p.cc && compMenu('physics', 'cc', T('添加组件 → 物理 → 角色控制器', 'Add Component → Physics → Character Controller'))); },
+    return nameIt(p, 'Player') || selFirst(p) || fix('pos', [0, 1, -4], p.pos) || (!p.cc && compMenu('physics', 'cc', T('添加组件 → 物理 → 角色控制器', 'Add Component → Physics → Character Controller'))); },
   body:T('第一人称游戏里，玩家通常是一个看不见的 <b>胶囊</b>。给它加一个 <b>角色控制器（Character Controller）</b>：走路时会被墙挡住，也会受重力。',
          'In a first-person game the player is usually an invisible <b>Capsule</b>. Give it a <b>Character Controller</b>: it stops at walls and falls with gravity.'),
   conds:[[T('新建胶囊，改名 Player', 'Create a Capsule named Player'), () => !!P() && P().type === 'capsule'],
-         [T('位置改成 0、1、-6（走廊南边）', 'Set Position to 0, 1, -6 (the south end)'), () => !!P() && G.near(P().pos, [0, 1, -6])],
+         [T('位置改成 0、1、-4（走廊南边）', 'Set Position to 0, 1, -4 (the south end)'), () => !!P() && G.near(P().pos, [0, 1, -4])],
          [T('添加组件 → 物理 → 角色控制器', 'Add Component → Physics → Character Controller'), () => !!P() && !!P().cc]],
   hint:T('胶囊高 2 米，中心在 1 米高的地方，所以 Y 是 1。', 'A Capsule is 2 m tall with its center 1 m up, so Y is 1.'),
   note:T('角色控制器本身就是一个胶囊形状的碰撞体。原来的胶囊碰撞体留着也行，很多人会点 ✕ 把它删掉。', 'The Character Controller is itself a capsule-shaped collider. You can keep the old Capsule Collider, but many people remove it with ✕.'),
-  auto:() => { let p = P() || G.S.objs.find(o => o.type === 'capsule') || G.mkObj('capsule', 'Player'); p.name = 'Player'; p.pos = [0, 1, -6]; if (!p.cc) p.cc = {seq:Date.now()}; G.select('obj', p.id); }},
+  auto:() => { let p = P() || G.S.objs.find(o => o.type === 'capsule') || G.mkObj('capsule', 'Player'); p.name = 'Player'; p.pos = [0, 1, -4]; if (!p.cc) p.cc = {seq:Date.now()}; G.select('obj', p.id); }},
 
  // 4
  {title:T('把摄像机变成眼睛', 'Turn the camera into eyes'), glow:() => ['#p-hier', '#p-insp'],
@@ -327,8 +327,8 @@ const STEPS = [
       const sf = scriptFlow('EnemyChase', m); if (sf) return sf;
       const rs = p && refSlot(m, 'EnemyChase', 'target', p); if (rs) return rs; }
     return playStep(F.navErr, {at:'#ptab-console', label:T('看控制台', 'Look at the Console')}); },
-  body:T('怪物就躲在你身后。新建一个胶囊当怪物，加 <b>NavMesh 代理</b> 和 EnemyChase 脚本。点播放：怪物不会动，控制台还有红字。这是故意的，下一步解决。',
-         'The monster hides right behind you. Make a capsule monster with a <b>NavMesh Agent</b> and the EnemyChase script. Press Play: it doesn’t move, and the Console shows a red error. That’s on purpose — the next step fixes it.'),
+  body:T('怪物就躲在你身后，播放 3 秒后才开始追。新建一个胶囊当怪物，加 <b>NavMesh 代理</b> 和 EnemyChase 脚本。点播放：怪物不会动，控制台还有红字。这是故意的，下一步解决。',
+         'The monster hides behind you and starts chasing 3 seconds after Play. Make a capsule monster with a <b>NavMesh Agent</b> and the EnemyChase script. Press Play: it doesn’t move, and the Console shows a red error. That’s on purpose — the next step fixes it.'),
   conds:[[T('胶囊 Monster，位置 0、1、-9（玩家背后）', 'A Capsule named Monster at Position 0, 1, -9 (behind the player)'), () => !!monster() && monster().type === 'capsule' && G.near(monster().pos, [0, 1, -9])],
          [T('添加组件 → 导航 → NavMesh 代理，速度 2.5（比你慢一点）', 'Add Component → Navigation → NavMesh Agent, Speed 2.5 (a bit slower than you)'), () => !!monster() && !!monster().agent && near1(monster().agent.speed, 2.5)],
          [T('新建脚本 EnemyChase，挂到 Monster 上，把 Player 拖进 Target 格子', 'Create a script named EnemyChase, put it on Monster, and drag Player into Target'), () => refOk(monster(), 'EnemyChase', 'target', P())],

@@ -90,7 +90,7 @@ scripts/smoke.js      冒烟测试：打开 app，截主页和编辑器两张图
 - **灯光窗口**（Window → Rendering → Lighting，`openLighting`）：`S.env = {skybox, src: skybox|color, amb, mul, fog, fogColor, fogMode: linear|exp|exp2, density, start, end}`，存在场景快照、撤销和存档里。场景视图右上角「灯光」按钮（`sceneLit`）关掉后用明亮的固定灯光编辑，不影响游戏画面。
 - **后期处理**：层级 + → 体积 → 全局体积（空物体 + `o.vol = {profile, ov}`）。配置文件点「新建」后才能「添加覆盖」：Bloom、Color Adjustments、Film Grain、Vignette。只有摄像机勾选了 Post Processing（`o.cam.post`，默认不勾，和 URP 新场景一样）才生效。实现：EffectComposer → RenderPass → UnrealBloomPass → OutputPass → 自己写的 ShaderPass（`GRADE`：曝光、对比度、饱和度、暗角、颗粒）。
 - **声音**：资源类型 `audio`（`clip` 是 audio.js 里的 key）。组件 `o.audio = {clip, volume, loop, awake, blend, minDist, maxDist}`（添加组件 → 音频 → 音频源；把音频拖到物体上会自动加一个）。播放时 `playSource` / `updateSounds`：3D 声音按离摄像机（音频监听器）的距离用对数衰减（minDist / 距离），并按左右分声道。游戏画面左下角列出正在响的声音（听不到也看得到）。设置里可以关掉声音（`ztg.settings.sound`）。
-- **触发器脚本**：`triggers()` 发现有东西进来时调用 `trigEnter`：DoorOpen 只认名字完全是 `OnTriggerEnter` 的方法（拼错不报错，只出一条 [模拟器提示]），标签不存在时报 `Tag: X is not defined.`；ExitZone 判断 Player 标签。`Time.timeScale = 0` 用 `S.frozen` 模拟（停止播放就恢复）。
+- **触发器脚本**：`triggers()` 发现有东西进来时调用 `trigEnter`：DoorOpen 只认名字完全是 `OnTriggerEnter` 的方法（拼错不报错，只出一条 [模拟器提示]），标签不存在时报 `Tag: X is not defined.`；ExitZone 判断 Player 标签。`Time.timeScale = 0` 用 `S.frozen` 模拟（停止播放就恢复）。游戏停住时，游戏画面下方会提示「点播放停止，再点一次重来」。EnemyChase 有 `startDelay`（默认 3 秒，用 `playT` 计时），第 1 章玩家从 z = -4 出发，怪物在 z = -9，给新手时间反应。按播放或点游戏画面时会把焦点从输入框移开，避免 W A S D 打进检查器。
 - **网格吸附**：W 工具拖箭头时按住 Ctrl / Cmd，每次移动 1 米；E 工具按住时每次 15 度。
 - **蓝图框**：章节步骤可以有 `ghosts()`，返回 `[{min, max, done, label}]`，场景视图画成蓝色虚线框（放好了变绿）。
 - **箭头提示**：目标在可滚动的面板里被挡住时会自动滚过去（层级很长时 Player 在最下面）。
