@@ -12,7 +12,7 @@ const near=(a,b,e=0.001)=>a.every((v,i)=>Math.abs(v-b[i])<e);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const rnd=v=>{const r=Math.round(v*1e4)/1e4;return r===0?0:r;};
 // Unity 名词：有术语解释的加 data-term（悬停弹出解释），其余在中文模式下用 title 显示英文原名
-const TERM_OF={transform:'transform',meshRenderer:'meshRenderer',boxCollider:'collider',meshCollider:'collider',sphereCollider:'collider',capsuleCollider:'collider',
+const TERM_OF={audioSource:'audioSource',lightingWin:'lighting',fog:'fog',volumeComp:'volume',postProcessing:'postProcessing',vignette:'postProcessing',filmGrain:'postProcessing',colorAdj:'postProcessing',bloom:'postProcessing',spatialBlend:'spatialBlend',transform:'transform',meshRenderer:'meshRenderer',boxCollider:'collider',meshCollider:'collider',sphereCollider:'collider',capsuleCollider:'collider',
   rigidbody:'rigidbody',camera:'camera',light:'light',material:'material',prefabAsset:'prefab',prefabInst:'prefab',isTrigger:'isTrigger',useGravity:'useGravity',
   isKinematic:'isKinematic',mass:'mass',shader:'shader',baseMap:'baseMap',fov:'fov',monoscript:'script',addComponent:'component',
   characterController:'characterController',navAgent:'navAgent',navSurface:'navMesh',tag:'tag',layer:'layer'};
@@ -24,8 +24,10 @@ const lsGet=k=>{try{return localStorage.getItem(k);}catch(e){return null;}},lsSe
 const SET=(()=>{const d={hints:'tiered',zoom:1};try{return Object.assign(d,JSON.parse(lsGet('ztg.settings')||'{}'));}catch(e){return d;}})();
 function setSetting(k,v){SET[k]=v;lsSet('ztg.settings',JSON.stringify(SET));if(k==='zoom')applyZoom();}
 function applyZoom(){const z=SET.zoom||1;if(window.ztgApp&&ztgApp.setZoom)ztgApp.setZoom(z);else document.documentElement.style.zoom=z===1?'':String(z);}
-// 模式：第 0 章 / 自由模式 / 找 Bug 挑战，各自有自己的存档
+// 模式：ch0 / ch1（教学）、free（自由模式）、bugs / bugs1（第 0 / 1 章的找 Bug 挑战），各自有自己的存档
 let MODE='ch0';
+const chapNum=m=>{const r=/^(?:ch|bugs)(\d)$/.exec(m||MODE);return r?+r[1]:0;};
+const isLesson=()=>/^ch\d$/.test(MODE),isBugs=()=>/^bugs\d?$/.test(MODE);
 
 /* ---------- 3D math (Unity convention: left-handed, Y up, Z forward) ---------- */
 function rotV(v,e){let [x,y,z]=v;const [ax,ay,az]=e.map(d=>d*Math.PI/180);
@@ -78,19 +80,26 @@ const V={yaw:-28,pitch:26,dist:13,target:[0,.5,0]};
 const keys=new Set();
 const TAGS=['Untagged','Respawn','Finish','EditorOnly','MainCamera','Player','GameController'];
 const LAYERS=['Default','TransparentFX','Ignore Raycast','Water','UI'];
-const modelJson=()=>JSON.stringify([S.objs,S.prefabs,S.assets]);
-function snapJson(){return JSON.stringify([S.objs,S.prefabs]);}
+const modelJson=()=>JSON.stringify([S.objs,S.prefabs,S.assets,S.env]);
+function snapJson(){return JSON.stringify([S.objs,S.prefabs,S.env]);}
+// 灯光窗口（Window → Rendering → Lighting）的设置：天空盒、环境光、雾
+const defEnv=()=>({skybox:true,src:'skybox',amb:'#363636',mul:1,fog:false,fogColor:'#808080',fogMode:'exp2',density:.01,start:0,end:300});
+const LIGHT_DEF={directional:{color:'#fff4e5',intensity:1,range:10,angle:30},point:{color:'#ffffff',intensity:1,range:10,angle:30},spot:{color:'#ffffff',intensity:1,range:10,angle:30}};
+const mkLight=k=>Object.assign({kind:k},LIGHT_DEF[k]);
 function mkObj(type,name,pos,scale){const o={id:nid(),type,name,parent:null,pos:pos||[0,0,0],rot:[0,0,0],scale:scale||[1,1,1],mat:null,prefab:null,scaleOverride:false,scripts:[],rb:null,
-  col:MESH_COL[type]?{kind:MESH_COL[type],trigger:false,seq:0}:null,tag:type==='camera'?'MainCamera':'Untagged',layer:'Default',cc:null,agent:null,navs:null};S.objs.push(o);return o;}
+  col:MESH_COL[type]?{kind:MESH_COL[type],trigger:false,seq:0}:null,tag:type==='camera'?'MainCamera':'Untagged',layer:'Default',cc:null,agent:null,navs:null,audio:null,vol:null,
+  light:type==='light'?mkLight('directional'):null,cam:type==='camera'?{post:false}:null};S.objs.push(o);return o;}
 // 旧存档里没有的字段补上默认值
 function fixObj(o){if(o.col===undefined)o.col=MESH_COL[o.type]?{kind:MESH_COL[o.type],trigger:false,seq:0}:null;if(!o.tag)o.tag=o.type==='camera'?'MainCamera':'Untagged';if(!o.layer)o.layer='Default';
-  for(const k of ['cc','agent','navs','rb'])if(o[k]===undefined)o[k]=null;if(o.parent===undefined)o.parent=null;
+  for(const k of ['cc','agent','navs','rb','audio','vol'])if(o[k]===undefined)o[k]=null;if(o.parent===undefined)o.parent=null;
+  if(o.type==='light'&&!o.light)o.light=mkLight('directional');if(o.type==='camera'&&!o.cam)o.cam={post:false};
   (o.scripts||[]).forEach(s=>{if(!s.vals)s.vals={speed:s.speed!=null?s.speed:5};});}
 function mkAsset(type,name,parent,extra){const a=Object.assign({id:nid(),type,name,parent:parent==null?S.cwd:parent},type==='script'?{blanks:{},comp:null}:{},extra||{});S.assets.push(a);return a;}
 const obj=id=>S.objs.find(o=>o.id===id), asset=id=>S.assets.find(a=>a.id===id);
-const freshFlags=()=>({win:[],winMsg:'',moved:false,rotated:false,scaled:false,maxInst:0,wide:false,viewed:false,played:false,playDist:0,movedInPlay:false,stopped:false,fell:false,fellStopped:false,saved:false});
+const freshFlags=()=>({win:[],winMsg:'',moved:false,rotated:false,scaled:false,maxInst:0,wide:false,viewed:false,played:false,playDist:0,movedInPlay:false,stopped:false,fell:false,fellStopped:false,saved:false,
+  hitWall:false,fpsStopped:false,steps:0,flickered:false,doorOpened:false,navErr:false,chased:false,caught:false,escaped:false});
 function init(){
-  S={objs:[],prefabs:{},assets:[],sel:null,multi:[],collapsed:[],tool:'w',tab:'scene',cwd:0,ptab:'project',step:0,playing:false,paused:false,snap:null,renaming:null,logs:[],savedJson:'',sig:'',dirty:false,flags:freshFlags()};
+  S={objs:[],prefabs:{},assets:[],env:defEnv(),sel:null,multi:[],collapsed:[],tool:'w',tab:'scene',cwd:0,ptab:'project',step:0,playing:false,paused:false,snap:null,renaming:null,logs:[],savedJson:'',sig:'',dirty:false,flags:freshFlags()};
   mkObj('camera',t('nCamera'),[0,1,-10]);const l=mkObj('light',t('nLight'),[0,3,0]);l.rot=[50,-30,0];
   const f=mkAsset('folder','Scenes',0);mkAsset('scene','SampleScene',f.id);
   S.savedJson=snapJson();log('info','lReady');resetUndo();
@@ -142,7 +151,7 @@ function rangeSel(id){const order=hierOrder().map(o=>o.id),a=order.indexOf(S.sel
 let undoS=[],redoS=[],lastModel='';
 function resetUndo(){undoS=[];redoS=[];lastModel=modelJson();}
 function trackUndo(){if(S.playing)return;const m=modelJson();if(m===lastModel)return;layMarks=[];undoS.push(lastModel);if(undoS.length>100)undoS.shift();redoS=[];lastModel=m;}
-function restoreModel(m){const [o,p,a]=JSON.parse(m);S.objs=o;S.prefabs=p;S.assets=a;lastModel=m;S.renaming=null;
+function restoreModel(m){const [o,p,a,en]=JSON.parse(m);S.objs=o;S.prefabs=p;S.assets=a;S.env=Object.assign(defEnv(),en||{});lastModel=m;S.renaming=null;
   if(S.sel){if(S.sel.k==='obj'){const ids=selIds().filter(id=>obj(id));if(!ids.length)select(null);else{S.multi=ids;if(!obj(S.sel.id))S.sel={k:'obj',id:ids[0]};}}else if(!asset(S.sel.id))select(null);}
   if(S.cwd&&!asset(S.cwd))S.cwd=0;}
 function undo(){if(S.playing||!undoS.length)return;closeMenu();redoS.push(modelJson());restoreModel(undoS.pop());commit();}
@@ -152,10 +161,10 @@ function redo(){if(S.playing||!redoS.length)return;closeMenu();undoS.push(modelJ
 const saveKey=m=>'ztg.'+(m||MODE)+'.save';let saveT=0;
 function saveProgress(){clearTimeout(saveT);saveT=setTimeout(saveNow,250);}
 function saveNow(){clearTimeout(saveT);if(!S||S.playing)return;
-  try{localStorage.setItem(saveKey(),JSON.stringify({v:1,uid,lang:ZTG.lang(),s:{objs:S.objs,prefabs:S.prefabs,assets:S.assets,step:S.step,flags:S.flags,cwd:S.cwd,logs:S.logs.slice(-60),savedJson:S.savedJson,collapsed:S.collapsed}}));}catch(e){}}
+  try{localStorage.setItem(saveKey(),JSON.stringify({v:1,uid,lang:ZTG.lang(),s:{objs:S.objs,prefabs:S.prefabs,assets:S.assets,env:S.env,step:S.step,flags:S.flags,cwd:S.cwd,logs:S.logs.slice(-60),savedJson:S.savedJson,collapsed:S.collapsed}}));}catch(e){}}
 function loadProgress(){let d=null;try{d=JSON.parse(localStorage.getItem(saveKey())||'null');}catch(e){}
   if(!d||d.v!==1||!d.s||!Array.isArray(d.s.objs)||!Array.isArray(d.s.assets))return false;
-  init();Object.assign(S,d.s);S.flags=Object.assign(freshFlags(),d.s.flags);S.collapsed=d.s.collapsed||[];uid=Math.max(uid,d.uid||1);
+  init();Object.assign(S,d.s);S.env=Object.assign(defEnv(),d.s.env||{});S.flags=Object.assign(freshFlags(),d.s.flags);S.collapsed=d.s.collapsed||[];uid=Math.max(uid,d.uid||1);
   S.objs.forEach(fixObj);
   if(d.lang&&d.lang!==ZTG.lang())renameDefaults(d.lang,ZTG.lang());
   resetUndo();return true;}
@@ -180,14 +189,19 @@ const IC={
   uislider:(z,s)=>sv('<path d="M2 8h12"/><circle cx="6" cy="8" r="2.2"/>',z,s),
   uibutton:(z,s)=>sv('<rect x="1.5" y="4.5" width="13" height="7" rx="2"/><path d="M5.5 8h5"/>',z,s),
   eventsystem:(z,s)=>sv('<path d="M4 2.5v9l2.5-2.3 1.7 3.8 1.8-.8-1.7-3.7h3.2z"/>',z,s),
+  audio:(z,s)=>sv('<path d="M2.5 6h2.5l3.5-3v10L5 10H2.5z"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.8a6 6 0 0 1 0 8.4"/>',z,s),
+  volume:(z,s)=>sv('<rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 11l2.2-3 1.6 2L10.5 7 12 11"/>',z,s),
+  bulb:(z,s)=>sv('<circle cx="8" cy="6.5" r="4"/><path d="M6.3 11.5h3.4M6.8 14h2.4"/>',z,s),
+  spot:(z,s)=>sv('<path d="M5 2.5h6l-1.5 4h-3z"/><path d="M6.5 6.5 3 14h10l-3.5-7.5"/>',z,s),
   itemdata:(z,s)=>sv('<path d="M8 1.5 14 8 8 14.5 2 8z"/><path d="M8 5v6M5 8h6"/>',z,s),
   folder:(z,s)=>sv('<path d="M1.5 4.5h5l1.2 1.5h6.8v6.8h-13z"/>',z,s),
   script:(z,s)=>sv('<path d="M3.5 1.5h6l3 3v10h-9z"/><path d="M6 8l-1.5 1.5L6 11M10 8l1.5 1.5L10 11"/>',z,s),
   scene:(z,s)=>sv('<path d="M2 3h12v10H2z"/><path d="M2 10l4-3 3 2 2-1.5 3 2"/>',z,s),
   mat:(z,c)=>`<svg viewBox="0 0 16 16" width="${z||14}" height="${z||14}"><circle cx="8" cy="8" r="6.2" fill="${c||'#fff'}" stroke="rgba(0,0,0,.45)" stroke-width="1.1"/><path d="M4.6 5.4a4.6 4.6 0 0 1 3.4-1.7" stroke="rgba(255,255,255,.75)" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>`
 };
-const objIcon=(o,z)=>(IC[o.type]||IC.cube)(z||14,o.prefab?'color:var(--accent)':'');
-const assetIcon=(a,z)=>a.type==='material'?IC.mat(z,a.color):a.type==='prefab'?IC.cube(z,'color:var(--accent)'):a.type==='model'?IC.cube(z,'color:var(--ok)'):a.type==='itemdata'?IC.itemdata(z,`color:${a.color||'#9a6b3c'}`):(IC[a.type]||IC.folder)(z);
+const objIcon=(o,z)=>{const k=o.type==='light'&&o.light&&o.light.kind!=='directional'?(o.light.kind==='spot'?'spot':'bulb'):o.type==='empty'&&o.vol?'volume':o.type==='empty'&&o.audio?'audio':o.type;
+  return (IC[k]||IC.cube)(z||14,o.prefab?'color:var(--accent)':'');};
+const assetIcon=(a,z)=>a.type==='audio'?IC.audio(z,'color:#7fd1ff'):a.type==='material'?IC.mat(z,a.color):a.type==='prefab'?IC.cube(z,'color:var(--accent)'):a.type==='model'?IC.cube(z,'color:var(--ok)'):a.type==='itemdata'?IC.itemdata(z,`color:${a.color||'#9a6b3c'}`):(IC[a.type]||IC.folder)(z);
 
 /* ---------- context menu ---------- */
 // 菜单项：{tk: 文字的 i18n key, k: 稳定 id（给教练箭头定位用）, fn, children, dis}
@@ -218,6 +232,8 @@ const nameKey=k=>'n'+k[0].toUpperCase()+k.slice(1);
 function create3D(kind){const o=mkObj(kind,t(nameKey(kind)));select('obj',o.id);log('info','lCreated',o.name);toast(t('created',o.name));commit();}
 function createEmpty(){const o=mkObj('empty',t('nEmpty'));select('obj',o.id);log('info','lCreated',o.name);toast(t('created',o.name));commit();}
 const items3D=()=>[{tk:'createEmpty',k:'empty',fn:createEmpty},{tk:'go3d',k:'go3d',children:SHAPES.map(s=>({tk:s,k:s,fn:()=>create3D(s)}))},
+  {tk:'lightM',k:'lightm',children:[{tk:'dirLightM',k:'dirlight',fn:()=>createLight('directional')},{tk:'pointLightM',k:'pointlight',fn:()=>createLight('point')},{tk:'spotLightM',k:'spotlight',fn:()=>createLight('spot')}]},
+  {tk:'volumeM',k:'volume',children:[{tk:'globalVolumeM',k:'globalvol',fn:createVolume}]},
   {tk:'uiM',k:'ui',children:[{tk:'uiText',k:'uitext',fn:()=>createUI('uitext')},{tk:'uiImage',k:'uiimage',fn:()=>createUI('uiimage')},{tk:'uiSlider',k:'uislider',fn:()=>createUI('uislider')},{tk:'uiButton',k:'uibutton',fn:()=>createUI('uibutton')}]}];
 // 和 Unity 一样：场景里没有画布时，先自动建一个画布和事件系统，UI 放在画布下面
 function createUI(kind){let c=S.objs.find(o=>o.type==='canvas');
@@ -225,6 +241,10 @@ function createUI(kind){let c=S.objs.find(o=>o.type==='canvas');
   const nk={uitext:'nText',uiimage:'nImage',uislider:'nSlider',uibutton:'nButton'}[kind];
   const o=mkObj(kind,uniqueName(t(nk),c.id));o.parent=c.id;o.ui=Object.assign({anchor:'mc',x:0,y:0},UI_DEF[kind]);
   S.collapsed=S.collapsed.filter(x=>x!==c.id);select('obj',o.id);log('info','lCreated',o.name);toast(t('created',o.name));commit();}
+// 灯光：方向光（像太阳）、点光源（灯泡）、聚光灯（手电筒）
+function createLight(kind){const o=mkObj('light',uniqueName(t({directional:'nLight',point:'nPointLight',spot:'nSpotLight'}[kind]),null));o.light=mkLight(kind);
+  if(kind==='directional')o.rot=[50,-30,0];select('obj',o.id);log('info','lCreated',o.name);toast(t('created',o.name));commit();}
+function createVolume(){const o=mkObj('empty',uniqueName(t('nGlobalVolume'),null));o.vol={profile:null,ov:{},seq:nid()};select('obj',o.id);log('info','lCreated',o.name);toast(t('created',o.name));commit();}
 function createItemData(){if(S.ptab!=='project')S.ptab='project';const a=mkAsset('itemdata','NewItemData',null,{itemName:'Item',color:'#9a6b3c',stackable:true,maxStack:20});
   S.renaming=a.id;select('asset',a.id);commit();setTimeout(()=>{const r=$('#rn');if(r){r.focus();r.select();}},0);}
 function createAsset(kind){
@@ -240,13 +260,14 @@ const itemsComp=()=>[
     {tk:'boxColliderM',k:'boxCol',fn:()=>addCollider('box')},{tk:'sphereColliderM',k:'sphereCol',fn:()=>addCollider('sphere')},
     {tk:'capsuleColliderM',k:'capsuleCol',fn:()=>addCollider('capsule')},{tk:'meshColliderM',k:'meshCol',fn:()=>addCollider('mesh')},
     {tk:'characterControllerM',k:'cc',fn:()=>addComp('cc','characterController',()=>({seq:nid()}))}]},
+  {tk:'audioCat',k:'audiocat',children:[{tk:'audioSourceM',k:'audiosrc',fn:()=>addComp('audio','audioSource',()=>({clip:null,volume:1,loop:false,awake:true,blend:0,minDist:1,maxDist:500,seq:nid()}))}]},
   {tk:'navigation',k:'nav',children:[{tk:'navAgentM',k:'agent',fn:()=>addComp('agent','navAgent',()=>({speed:3.5,seq:nid()}))},
     {tk:'navSurfaceM',k:'surface',fn:()=>addComp('navs','navSurface',()=>({baked:null,seq:nid()}))}]}];
 function deleteSel(){const a=selAsset(),tg=topSel();
   if(tg.length){const kill=new Set(tg.flatMap(subtree).map(x=>x.id));S.objs=S.objs.filter(x=>!kill.has(x.id));tg.forEach(o=>log('info','lDeleted',o.name));select(null);
-    S.objs.forEach(x=>x.scripts.forEach(s=>{if(s.vals&&kill.has(s.vals.target))s.vals.target=null;}));}
+    S.objs.forEach(x=>x.scripts.forEach(s=>{if(s.vals)for(const k in s.vals)if(typeof s.vals[k]==='number'&&kill.has(s.vals[k])&&k!=='speed')s.vals[k]=null;}));}
   else if(a&&a.type!=='scene'){const kill=new Set([a.id]);let ch=true;while(ch){ch=false;S.assets.forEach(x=>{if(!kill.has(x.id)&&kill.has(x.parent)){kill.add(x.id);ch=true;}});}
-    S.assets=S.assets.filter(x=>!kill.has(x.id));S.objs.forEach(x=>{if(kill.has(x.mat))x.mat=null;x.scripts=x.scripts.filter(s=>!kill.has(s.asset));});select(null);}
+    S.assets=S.assets.filter(x=>!kill.has(x.id));S.objs.forEach(x=>{if(kill.has(x.mat))x.mat=null;if(x.audio&&kill.has(x.audio.clip))x.audio.clip=null;x.scripts=x.scripts.filter(s=>!kill.has(s.asset));});select(null);}
   commit();}
 // 复制出来的物体叫 "Cube (1)"、"Cube (2)"，和 Unity 6 一样
 function uniqueName(name,pid){const base=name.replace(/\s\(\d+\)$/,'');const sib=S.objs.filter(o=>(o.parent==null?null:o.parent)===(pid==null?null:pid));
@@ -256,7 +277,7 @@ function uniqueName(name,pid){const base=name.replace(/\s\(\d+\)$/,'');const sib
 function insertTree(tree,pid,at){const map=new Map();
   const out=tree.map(x=>{const c=JSON.parse(JSON.stringify(x));map.set(x.id,c.id=nid());return c;});
   out.forEach(c=>{if(map.has(c.parent))c.parent=map.get(c.parent);c.scripts=(c.scripts||[]).map(s=>Object.assign({},s,{seq:nid()}));
-    for(const k of ['rb','cc','agent','navs'])if(c[k])c[k]=Object.assign({},c[k],{seq:nid()});
+    for(const k of ['rb','cc','agent','navs','audio','vol'])if(c[k])c[k]=Object.assign({},c[k],{seq:nid()});
     if(c.prefab&&!S.prefabs[c.prefab])c.prefab=null;if(c.mat&&!asset(c.mat))c.mat=null;});
   out[0].parent=pid==null?null:pid;out[0].name=uniqueName(out[0].name,out[0].parent);
   S.objs.splice(at,0,...out);return out[0];}
@@ -285,6 +306,9 @@ function spawn(a,at){const pf=S.prefabs[a.prefabId];if(!pf)return;
 function spawnModel(a,at){const pd=PROPS()[a.model];if(!pd)return;
   const o=mkObj('model',uniqueName(a.name,null),at?[at[0],0,at[2]]:[0,0,0]);o.model=a.model;o.col={kind:'box',trigger:false,seq:0};
   select('obj',o.id);log('info','lInst',o.name);commit();}
+function importSound(key){const c=ZTG.audio&&ZTG.audio.clips[key];if(!c)return;
+  let f=S.assets.find(x=>x.type==='folder'&&x.name==='Audio'&&x.parent===0);if(!f)f=mkAsset('folder','Audio',0);
+  const a=S.assets.find(x=>x.type==='audio'&&x.clip===key)||mkAsset('audio',c.name,f.id,{clip:key});S.ptab='project';S.cwd=a.parent;select('asset',a.id);toast(t('imported',c.name));commit();}
 function importProp(key){const pd=PROPS()[key];if(!pd)return;
   let f=S.assets.find(x=>x.type==='folder'&&x.name==='Models'&&x.parent===0);if(!f)f=mkAsset('folder','Models',0);
   const a=mkAsset('model',pd.en.replace(/\s/g,''),f.id,{model:key});S.ptab='project';S.cwd=f.id;select('asset',a.id);toast(t('imported',L(pd)));commit();}
@@ -301,8 +325,9 @@ function addComp(key,tk,make){const o=selObj();if(!o)return;
   if(o[key])log('warn','lHasComp',o.name);else{o[key]=make();log('info','lAddedComp',ZTG.tl('en',tk),o.name);toast(t('lAddedComp',t(tk),o.name));}commit();}
 function removeComp(o,c){if(!o)return;if(c.startsWith('script:'))o.scripts.splice(+c.slice(7),1);else o[c]=null;commit();}
 // 不同脚本模板：第 0 章的 PlayerMove + scripts.js 里的内置脚本。文件名决定用哪个模板。
-const LIB=()=>Object.assign({PlayerMove:CHAP.script},ZTG.scriptLib||{});
-const tmplOf=a=>LIB()[a.name]||CHAP.script;
+const PM=()=>ZTG.chapters.ch0.script;
+const LIB=()=>Object.assign({PlayerMove:PM()},ZTG.scriptLib||{});
+const tmplOf=a=>LIB()[a.name]||PM();
 const nice=n=>n.replace(/([a-z])([A-Z])/g,'$1 $2');
 function addScript(o,a){const tm=tmplOf(a),vals={};
   (tm.fields||[]).forEach(f=>{vals[f.id]=f.id==='speed'&&a.comp&&a.comp.rt&&a.comp.rt.speed!=null?a.comp.rt.speed:f.def;});
@@ -310,6 +335,9 @@ function addScript(o,a){const tm=tmplOf(a),vals={};
 function applyAsset(a,o){
   if(!a||!o)return;
   if(a.type==='material'){if(isRender(o)){o.mat=a.id;log('info','lMat',a.name,o.name);toast(t('applied',a.name,o.name));}else log('warn','lNoRenderer',o.name);}
+  else if(a.type==='audio'){// 和真 Unity 一样：把音频拖到物体上，会自动加一个音频源
+    if(!o.audio){o.audio={clip:a.id,volume:1,loop:false,awake:true,blend:0,minDist:1,maxDist:500,seq:nid()};log('info','lAddedComp','Audio Source',o.name);}else o.audio.clip=a.id;
+    select('obj',o.id);toast(t('applied',a.name,o.name));}
   else if(a.type==='script'){const tm=LIB()[a.name];
     if(tm&&!tm.blanks.length&&!a.comp)compileScript(a);
     if(!tm){log('error','lScriptErr',a.name);S.ptab='console';toast(t('seeConsole'));}
@@ -324,7 +352,7 @@ function moveAsset(a,folderId){if(a.id===folderId)return;let c=folderId;while(c)
 
 /* ---------- scripts: 编译、报错位置 ---------- */
 function assetPath(a){const p=[];let c=a.parent;while(c){const f=asset(c);if(!f)break;p.unshift(f.name);c=f.parent;}return ['Assets',...p,a.name+'.cs'].join('/');}
-function blankPos(b,vals,tm){const lines=(tm||CHAP.script).lines;for(let i=0;i<lines.length;i++){let col=1;
+function blankPos(b,vals,tm){const lines=(tm||PM()).lines;for(let i=0;i<lines.length;i++){let col=1;
   for(const seg of lines[i].c){if(typeof seg==='string')col+=seg.length;else if(seg.b===b)return {line:i,col};else col+=String(vals[seg.b]||'').length;}}return {line:-1,col:1};}
 function compileScript(a){const tm=tmplOf(a),vals=a.blanks||{};const r=tm.compile(vals);
   const errs=r.errors.map(e=>Object.assign({},e,blankPos(e.b,vals,tm)));a.comp={ok:!errs.length,errs,rt:r.rt};}
@@ -364,7 +392,8 @@ function ccMove(o,dir,speed,dt){const s=wScale(o),r=.5*Math.max(Math.abs(s[0]),M
   let v=(vel.get(o.id)||0)-9.81*dt,ny=y+v*dt;const g=groundAt(x,z,y-half,half,o,r*.5);
   if(ny-half<=g){ny=g+half;v=0;}
   const feet=ny-half,head=ny+half,dx=dir[0]*speed*dt,dz=dir[2]*speed*dt;
-  if(!blocked(x+dx,z,feet,head,o,r))x+=dx;if(!blocked(x,z+dz,feet,head,o,r))z+=dz;
+  if(!blocked(x+dx,z,feet,head,o,r))x+=dx;else if(Math.abs(dx)>1e-6)S.flags.hitWall=true;
+  if(!blocked(x,z+dz,feet,head,o,r))z+=dz;else if(Math.abs(dz)>1e-6)S.flags.hitWall=true;
   vel.set(o.id,v);const moved=Math.hypot(x-o.pos[0],z-o.pos[2])>1e-5;o.pos=[x,ny,z];if(ny<-3)S.flags.fell=true;return moved;}
 // 触发器：有刚体 / 角色控制器 / 导航代理的物体进出触发器时记一笔
 let trigIn=new Set();
@@ -372,7 +401,7 @@ function triggers(){const bodies=S.objs.filter(o=>o.parent==null&&dyn(o));const 
   for(const b of bodies){const bb=b.cc?wAABB(b,CC_BOUNDS):b.col?wAABB(b,colBounds(b)):null;if(!bb)continue;
     for(const c of COLS){if(!c.trig||c.o===b||isAnc(b,c.o))continue;
       if(bb[0][0]<c.max[0]&&bb[1][0]>c.min[0]&&bb[0][1]<c.max[1]&&bb[1][1]>c.min[1]&&bb[0][2]<c.max[2]&&bb[1][2]>c.min[2]){const k=c.o.id+':'+b.id;now.add(k);
-        if(!trigIn.has(k))log('info','lTrigEnter',c.o.name,b.name,b.tag);}}}
+        if(!trigIn.has(k)){log('info','lTrigEnter',c.o.name,b.name,b.tag);trigEnter(c.o,b);}}}}
   for(const k of trigIn)if(!now.has(k)){const [ti,bi]=k.split(':').map(Number);const tr=obj(ti),bo=obj(bi);if(tr&&bo)log('info','lTrigExit',tr.name,bo.name);}
   const changed=now.size!==trigIn.size||[...now].some(k=>!trigIn.has(k));trigIn=now;return changed;}
 
@@ -418,13 +447,13 @@ function runFPS(o,s,a,tm,dt){
   if(!o.cc){nre(a,tm,'noCC','whyNoCC');return false;}
   let x=0,z=0;if(keys.has('KeyA'))x-=1;if(keys.has('KeyD'))x+=1;if(keys.has('KeyS'))z-=1;if(keys.has('KeyW'))z+=1;
   const R=wRot(o),f=norm([R[2][0],0,R[2][2]]),r=norm([R[0][0],0,R[0][2]]);let dir=add(mul(r,x),mul(f,z));const l=Math.hypot(dir[0],dir[2]);dir=l?mul(dir,1/l):[0,0,0];
-  return ccMove(o,dir,l?s.vals.speed:0,dt)&&l>0;}
+  const mv=ccMove(o,dir,l?s.vals.speed:0,dt)&&l>0;if(mv)walkedNow.add(o.id);return mv;}
 function runChase(o,s,a,tm,dt){
   if(!o.agent){nre(a,tm,'chase','whyNoAgent');return false;}
   const tg=s.vals.target!=null?obj(s.vals.target):null;
   if(!tg){onceErr(a,'target',()=>{const ln=errLine(tm,'noTarget');logSrc('error','lUnassigned',[a.name,'target'],a,ln);});return false;}
   const nv=NAV(),me=navCell(nv||{x0:0,z0:0,cs:1},o.pos[0],o.pos[2]);
-  if(!nv||!nearestOk(nv,...me)){onceErr(a,'nonav',()=>{const ln=errLine(tm,'chase');logSrc('error','lNoNavMesh',[],a,ln);});return false;}
+  if(!nv||!nearestOk(nv,...me)){onceErr(a,'nonav',()=>{const ln=errLine(tm,'chase');logSrc('error','lNoNavMesh',[],a,ln);S.flags.navErr=true;});return false;}
   const st=agentState.get(o.id)||{t:0,path:null};agentState.set(o.id,st);
   const tp=wPos(tg);st.t-=dt;if(st.t<=0||!st.path){st.t=.25;st.path=findPath(nv,me,navCell(nv,tp[0],tp[2]));}
   const b=o.col?wAABB(o,colBounds(o)):null,bottom=b?o.pos[1]-b[0][1]:0;o.pos[1]=nv.y+bottom;
@@ -432,7 +461,18 @@ function runChase(o,s,a,tm,dt){
   while(st.path.length>1){const [i,j]=st.path[0],cx=nv.x0+(i+.5)*nv.cs,cz=nv.z0+(j+.5)*nv.cs;if(Math.hypot(cx-o.pos[0],cz-o.pos[2])<.3)st.path.shift();else break;}
   const [i,j]=st.path[0];const cx=nv.x0+(i+.5)*nv.cs,cz=nv.z0+(j+.5)*nv.cs;const dx=cx-o.pos[0],dz=cz-o.pos[2],d=Math.hypot(dx,dz);
   if(d<1e-4){st.path.shift();return false;}const step=Math.min(d,o.agent.speed*dt);
-  o.pos[0]+=dx/d*step;o.pos[2]+=dz/d*step;o.rot[1]=rnd(Math.atan2(dx,dz)*180/Math.PI);return true;}
+  o.pos[0]+=dx/d*step;o.pos[2]+=dz/d*step;o.rot[1]=rnd(Math.atan2(dx,dz)*180/Math.PI);st.dist=(st.dist||0)+step;if(st.dist>2)S.flags.chased=true;return true;}
+/* ---------- 声音：音频源播放；3D 声音按离音频监听器（摄像机）的距离变小，并分左右 ---------- */
+const sounds=new Map();let soundOn=SET.sound!==false;
+function playSource(o,opt){const au=o.audio,a=au&&au.clip!=null?asset(au.clip):null;if(!a||a.type!=='audio')return false;
+  const old=sounds.get(o.id);if(old&&old.h)old.h.stop();
+  const h=ZTG.audio?ZTG.audio.play(a.clip,Object.assign({loop:au.loop,volume:0},opt||{})):null;sounds.set(o.id,{h,name:a.name,t:performance.now(),len:(ZTG.audio.clips[a.clip]||{}).len||1,loop:au.loop,g:0});updateSounds();return true;}
+function stopSounds(){for(const v of sounds.values())if(v.h)v.h.stop();sounds.clear();}
+function updateSounds(){const c=S.objs.find(q=>q.type==='camera');const lp=c?wPos(c):[0,0,0],LR=c?wRot(c):eulerM([0,0,0]);
+  for(const [id,v] of sounds){const o=obj(id);if(!o||!o.audio){if(v.h)v.h.stop();sounds.delete(id);continue;}
+    const au=o.audio,b=clamp(au.blend||0,0,1),rel=sub(wPos(o),lp),d=Math.hypot(rel[0],rel[1],rel[2]),mn=Math.max(.01,au.minDist||1);
+    const att=d<=mn?1:mn/Math.min(d,Math.max(mn,au.maxDist||500));v.g=clamp(au.volume,0,1)*((1-b)+b*att);
+    const side=d>.01?dot(LR[0],rel)/d:0;if(v.h)v.h.set(v.g,side*b);}}
 function unassigned(a,tm,field,errKey){onceErr(a,'u_'+field,()=>{const ln=errLine(tm,errKey);logSrc('error','lUnassigned',[a.name,field],a,ln);});}
 const logLineOf=(tm,re)=>tm.lines.findIndex(l=>l.c.some(x=>typeof x==='string'&&re.test(x)));
 function runSurvival(o,s,a,tm,dt){const bar=s.vals.hungerBar!=null?obj(s.vals.hungerBar):null;
@@ -449,11 +489,38 @@ function runSaveLoad(o,s,a,tm){
 function startInventory(o,s,a,tm){const tx=s.vals.listText!=null?obj(s.vals.listText):null;
   let text='Inventory:';for(const id of (s.vals.startItems||[])){const it=asset(id);if(it)text+='\n- '+(it.itemName||it.name);}
   if(!tx||!tx.ui){unassigned(a,tm,'listText','noText');return;}tx.ui.text=text;logSrc('info','raw',[text],a,logLineOf(tm,/Debug\.Log/));}
-function runScripts(dt){let moving=false;const ran=new Set();
+// 第 1 章：闪烁的灯、脚步声、开门、抓人、出口
+let walkedPrev=new Set(),walkedNow=new Set();const trigFlash=new Map();
+function runFlicker(o,s,a,tm,dt){if(!o.light){nre(a,tm,'noLight','whyNoLight');return false;}
+  const st=agentState.get('fl'+o.id)||{t:0};agentState.set('fl'+o.id,st);st.t-=dt;if(st.t>0)return false;
+  const lo=s.vals.minIntensity||0,hi=s.vals.maxIntensity||0;o.light.intensity=rnd(lo+Math.random()*(hi-lo));st.t=Math.max(.02,s.vals.flickerSpeed||.08);S.flags.flickered=true;return true;}
+function runFootsteps(o,s,a,tm,dt){if(!o.cc){nre(a,tm,'noCC','whyNoCC');return false;}
+  if(!walkedPrev.has(o.id))return false;
+  const st=agentState.get('fs'+o.id)||{t:0};agentState.set('fs'+o.id,st);st.t-=dt;if(st.t>0)return true;st.t=Math.max(.1,s.vals.stepInterval||.5);
+  if(!o.audio){nre(a,tm,'noAudio','whyNoAudio');return true;}
+  if(playSource(o,{rate:.9+Math.random()*.2}))S.flags.steps++;return true;}
+function runDoor(o,s,a,tm,dt){const st=agentState.get('door'+o.id)||{};agentState.set('door'+o.id,st);const d=s.vals.door!=null?obj(s.vals.door):null;
+  if(!st.started){st.started=true;if(!d){unassigned(a,tm,'door','noDoor');return false;}st.target=add(wPos(d),[0,s.vals.liftHeight||0,0]);}
+  if(!st.open||!d||!st.target)return false;const p=wPos(d),v=sub(st.target,p),l=Math.hypot(v[0],v[1],v[2]);if(l<1e-4)return false;
+  setWorldPos(d,add(p,mul(v,Math.min(l,(s.vals.speed||0)*dt)/l)));S.flags.doorOpened=true;return true;}
+function runCatch(o,s,a,tm){const tg=s.vals.target!=null?obj(s.vals.target):null;if(!tg){unassigned(a,tm,'target','noTarget');return false;}
+  const p=wPos(o),q=wPos(tg);if(Math.hypot(p[0]-q[0],p[1]-q[1],p[2]-q[2])>=(s.vals.catchDistance||0))return false;
+  const m=s.vals.message!=null?obj(s.vals.message):null;if(!m||!m.ui){unassigned(a,tm,'message','noMsg');return false;}
+  m.ui.text='GAME OVER';S.frozen=true;S.flags.caught=true;log('info','lTimeScale');return true;}
+// OnTriggerEnter：真 Unity 只调用名字完全对的方法；标签不存在时 CompareTag 会报错
+function trigEnter(tr,body){for(const s of tr.scripts){const a=asset(s.asset),tm=a&&LIB()[a.name];if(!s.enabled||!tm||!a.comp||!a.comp.ok)continue;
+  if(tm.kind==='door'){const rt=a.comp.rt;if(rt.method!=='OnTriggerEnter'){onceErr(a,'cb',()=>log('warn','lNoCallback',a.name,rt.method));continue;}
+    trigFlash.set(a.id,performance.now()+900);
+    if(!TAGS.includes(rt.tag)){onceErr(a,'tag',()=>{const ln=logLineOf(tm,/CompareTag/);logSrc('error','lNoTag',[rt.tag],a,ln);});continue;}
+    if(body.tag===rt.tag){const st=agentState.get('door'+tr.id)||{};st.open=true;agentState.set('door'+tr.id,st);}}
+  else if(tm.kind==='exit'){trigFlash.set(a.id,performance.now()+900);if(body.tag!=='Player')continue;const m=s.vals.message!=null?obj(s.vals.message):null;
+    if(!m||!m.ui){unassigned(a,tm,'message','noMsg');continue;}m.ui.text='YOU ESCAPED';S.frozen=true;S.flags.escaped=true;log('info','lTimeScale');}}}
+function runScripts(dt){let moving=false;const ran=new Set();walkedPrev=walkedNow;walkedNow=new Set();
   for(const o of S.objs)for(const s of o.scripts){const a=asset(s.asset);const tm=a&&LIB()[a.name];if(!s.enabled||!tm||!a.comp||!a.comp.ok)continue;ran.add(a.id);
     if(!s.vals)s.vals={speed:5};
     let mv=false;if(tm.kind==='translate')mv=runPlayerMove(o,s,a,dt);else if(tm.kind==='fps')mv=runFPS(o,s,a,tm,dt);else if(tm.kind==='chase')mv=runChase(o,s,a,tm,dt);
     else if(tm.kind==='survival')mv=runSurvival(o,s,a,tm,dt);else if(tm.kind==='daynight')mv=runDayNight(o,s,a,dt);else if(tm.kind==='saveload')mv=runSaveLoad(o,s,a,tm);
+    else if(tm.kind==='flicker')mv=runFlicker(o,s,a,tm,dt);else if(tm.kind==='footsteps')mv=runFootsteps(o,s,a,tm,dt);else if(tm.kind==='door')mv=runDoor(o,s,a,tm,dt);else if(tm.kind==='catch')mv=runCatch(o,s,a,tm);
     if(mv)moving=a.id;}
   mdx=mdy=0;pressedNow.clear();return {moving,ran};}
 
@@ -464,18 +531,19 @@ R3.shadowMap.enabled=true;R3.shadowMap.type=T3.PCFShadowMap;R3.toneMapping=T3.AC
 const scene3=new T3.Scene();
 const cam3=new T3.PerspectiveCamera(60,1,.05,500);cam3.matrixAutoUpdate=false;cam3.matrixWorldAutoUpdate=false;
 const sun=new T3.DirectionalLight(0xfff4e5,2.4);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
-Object.assign(sun.shadow.camera,{left:-22,right:22,top:22,bottom:-22,near:.5,far:120});sun.shadow.bias=-.0006;scene3.add(sun,sun.target);
+Object.assign(sun.shadow.camera,{left:-22,right:22,top:22,bottom:-22,near:.5,far:120});sun.shadow.bias=-.0006;sun.shadow.normalBias=.03;scene3.add(sun,sun.target);
 const amb=new T3.HemisphereLight(0xcfdcff,0x4f4840,1.2);scene3.add(amb);
 const grid=new T3.GridHelper(24,24,0xffffff,0xffffff);grid.material.transparent=true;grid.material.opacity=.13;grid.material.depthWrite=false;grid.position.y=.003;scene3.add(grid);
 function gradTex(a,b){const c=document.createElement('canvas');c.width=2;c.height=256;const g=c.getContext('2d');const gr=g.createLinearGradient(0,0,0,256);gr.addColorStop(0,a);gr.addColorStop(1,b);g.fillStyle=gr;g.fillRect(0,0,2,256);const tx=new T3.CanvasTexture(c);tx.colorSpace=T3.SRGBColorSpace;return tx;}
 const BG={scene:gradTex('#48536c','#2a303d'),game:gradTex('#78b0e6','#d8eaf8')};
 const GEO={cube:new T3.BoxGeometry(1,1,1),sphere:new T3.SphereGeometry(.5,32,20),capsule:new T3.CapsuleGeometry(.5,1,8,24),cylinder:new T3.CylinderGeometry(.5,.5,2,32),plane:new T3.PlaneGeometry(10,10).rotateX(-Math.PI/2),quad:new T3.PlaneGeometry(1,1)};
 const EDGES={plane:new T3.EdgesGeometry(GEO.plane),quad:new T3.EdgesGeometry(GEO.quad)};
-const DEF_MAT=new T3.MeshStandardMaterial({color:0xcdcdcd,roughness:.55});
+// 阴影只用朝向灯的那一面（和 Unity 的 ShadowCaster 一样），所以手电筒在玩家胶囊里面也照得出去
+const DEF_MAT=new T3.MeshStandardMaterial({color:0xcdcdcd,roughness:.55,shadowSide:T3.FrontSide});
 const MATS=new Map();
 // Standard 是旧的内置渲染管线着色器：在 URP 项目里会变成粉红色，和真 Unity 一样
 function matFor(o){const m=matOf(o);if(!m)return DEF_MAT;const sh=m.shader||'URP/Lit',key=m.id+'|'+sh;let mm=MATS.get(key);
-  if(!mm){mm=sh==='Standard'?new T3.MeshBasicMaterial({color:0xff00ff}):sh==='URP/Unlit'?new T3.MeshBasicMaterial({}):new T3.MeshStandardMaterial({roughness:.5});MATS.set(key,mm);}
+  if(!mm){mm=sh==='Standard'?new T3.MeshBasicMaterial({color:0xff00ff}):sh==='URP/Unlit'?new T3.MeshBasicMaterial({}):new T3.MeshStandardMaterial({roughness:.5});mm.shadowSide=T3.FrontSide;MATS.set(key,mm);}
   if(sh!=='Standard')mm.color.set(m.color);return mm;}
 // Unity 坐标 → Three.js 坐标：两边各乘一个 Z 翻转矩阵（行列式不变，所以正反面不会反）
 const FLIP=new T3.Matrix4().makeScale(1,1,-1);
@@ -489,7 +557,7 @@ EDGES.box=new T3.EdgesGeometry(GEO.cube);
 // 素材库模型：每个零件一个 Mesh，放在一个 Group 里
 const PGEO={box:new T3.BoxGeometry(1,1,1),cyl:new T3.CylinderGeometry(.5,.5,1,12),cone:new T3.ConeGeometry(.5,1,10),sphere:new T3.SphereGeometry(.5,14,10),ico:new T3.IcosahedronGeometry(.5,0)};
 const PMATS=new Map();
-function pmat(c,e){const k=c+'|'+(e||'');let m=PMATS.get(k);if(!m){m=new T3.MeshStandardMaterial({color:c,roughness:.8,flatShading:true});if(e){m.emissive.set(e);m.emissiveIntensity=1.6;}PMATS.set(k,m);}return m;}
+function pmat(c,e){const k=c+'|'+(e||'');let m=PMATS.get(k);if(!m){m=new T3.MeshStandardMaterial({color:c,roughness:.8,flatShading:true,shadowSide:T3.FrontSide});if(e){m.emissive.set(e);m.emissiveIntensity=1.6;}PMATS.set(k,m);}return m;}
 function partMat(q){const R=eulerM(q.r||[0,0,0]),s=q.s;return new T3.Matrix4().set(R[0][0]*s[0],R[1][0]*s[1],R[2][0]*s[2],q.p[0],R[0][1]*s[0],R[1][1]*s[1],R[2][1]*s[2],q.p[1],R[0][2]*s[0],R[1][2]*s[1],R[2][2]*s[2],q.p[2],0,0,0,1);}
 function buildModel(o){const pd=PROPS()[o.model],g=new T3.Group();g.matrixAutoUpdate=false;g.userData={id:o.id,type:'model',model:o.model};if(!pd)return g;
   for(const q of pd.parts){const mesh=new T3.Mesh(PGEO[q.g],pmat(q.c,q.e));mesh.matrixAutoUpdate=false;mesh.matrix.copy(tMat(partMat(q)));
@@ -512,10 +580,52 @@ function sync3(selSet){const seen=new Set();
       m.matrix.copy(tMat(uMat(o).multiply(new T3.Matrix4().makeTranslation((b[0][0]+b[1][0])/2,(b[0][1]+b[1][1])/2,(b[0][2]+b[1][2])/2)).multiply(new T3.Matrix4().makeScale(b[1][0]-b[0][0]+.04,b[1][1]-b[0][1]+.04,b[1][2]-b[0][2]+.04))));}
     else{m.matrix.copy(base.matrix);if(!line)m.matrix.multiply(new T3.Matrix4().makeScale(1.045,1.045,1.045));}
     m.matrixWorldNeedsUpdate=true;}
-  // 太阳越低越暗，落到地平线下面就是晚上（昼夜循环脚本会转方向光）
-  const light=S.objs.find(o=>o.type==='light');sun.visible=!!light;let elev=.77;
-  if(light){const d=mMV(wRot(light),[0,0,1]);sun.target.position.set(0,0,0);sun.position.set(-d[0]*40,-d[1]*40,d[2]*40);sun.target.updateMatrixWorld();elev=-d[1];}
-  const day=clamp(elev*3,0,1);sun.intensity=2.4*day;amb.intensity=.25+.95*clamp(elev*2+.3,0,1);sun.color.setRGB(1,.82+.18*day,.7+.3*day);setSky(elev);}
+}
+// 灯光：第一个方向光当太阳（越低越暗，落到地平线下面就是晚上）；点光源、聚光灯各对应一个 Three.js 灯。
+// 场景视图可以关掉「场景灯光」，用固定的明亮灯光编辑（真 Unity 场景视图工具栏的灯泡按钮）。
+let sceneLit=true;const L3=new Map(),POINT_K=12,SPOT_K=45,BLACK=new T3.Color(0);
+const fogExp=new T3.FogExp2(0x808080,.01),fogLin=new T3.Fog(0x808080,0,300);
+function applyLighting(game){const env=S.env,lit=game||sceneLit;
+  const dl=S.objs.find(o=>o.type==='light'&&(!o.light||o.light.kind==='directional'));let elev=.77;
+  const dir=lit?(dl?mMV(wRot(dl),[0,0,1]):null):mMV(eulerM([50,-30,0]),[0,0,1]);
+  sun.visible=!!dir;
+  if(dir){sun.target.position.set(0,0,0);sun.position.set(-dir[0]*40,-dir[1]*40,dir[2]*40);sun.target.updateMatrixWorld();if(lit)elev=-dir[1];
+    const day=clamp(elev*3,0,1),c=new T3.Color(lit&&dl&&dl.light?dl.light.color:'#fff4e5');sun.intensity=2.4*day*(lit&&dl&&dl.light?dl.light.intensity:1);sun.color.setRGB(c.r,c.g*(.82+.18*day),c.b*(.7+.3*day));}
+  if(lit&&env.src==='color'){amb.color.set(env.amb);amb.groundColor.set(env.amb);amb.intensity=1.6;}
+  else{amb.color.set(0xcfdcff);amb.groundColor.set(0x4f4840);amb.intensity=(.25+.95*clamp(elev*2+.3,0,1))*(lit?env.mul:1);}
+  if(lit&&env.fog){if(env.fogMode==='linear'){fogLin.color.set(env.fogColor);fogLin.near=env.start;fogLin.far=Math.max(env.start+.01,env.end);scene3.fog=fogLin;}
+    else{fogExp.color.set(env.fogColor);fogExp.density=env.fogMode==='exp'?env.density*.75:env.density;scene3.fog=fogExp;}}else scene3.fog=null;
+  setSky(elev);syncLights(lit);
+  scene3.background=game?(env.skybox?BG.game:BLACK):BG.scene;}
+function syncLights(lit){const seen=new Set();
+  for(const o of S.objs){if(o.type!=='light'||!o.light||o.light.kind==='directional')continue;const k=o.light.kind;let l=L3.get(o.id);
+    if(!l||l.userData.kind!==k){if(l){scene3.remove(l);if(l.target)scene3.remove(l.target);}
+      l=k==='spot'?new T3.SpotLight():new T3.PointLight();l.userData.kind=k;l.decay=2;
+      if(k==='spot'){l.castShadow=true;l.shadow.mapSize.set(1024,1024);l.shadow.bias=-.0004;l.shadow.normalBias=.03;l.shadow.camera.near=.1;l.penumbra=.35;scene3.add(l.target);}
+      scene3.add(l);L3.set(o.id,l);}
+    const p=wPos(o);l.position.set(p[0],p[1],-p[2]);l.color.set(o.light.color);l.distance=Math.max(.01,o.light.range);
+    l.intensity=lit?Math.max(0,o.light.intensity)*(k==='spot'?SPOT_K:POINT_K):0;
+    if(k==='spot'){const d=mMV(wRot(o),[0,0,1]);l.target.position.set(p[0]+d[0],p[1]+d[1],-(p[2]+d[2]));l.target.updateMatrixWorld();l.angle=clamp(o.light.angle,1,179)/2*Math.PI/180;}
+    seen.add(o.id);}
+  for(const [id,l] of L3)if(!seen.has(id)){scene3.remove(l);if(l.target)scene3.remove(l.target);L3.delete(id);}}
+// 后期处理（Global Volume）：泛光（Bloom）→ 色调映射 → 暗角、颗粒、色彩调整。摄像机要勾选「后期处理」才会生效。
+const GRADE={uniforms:{tDiffuse:{value:null},vig:{value:0},grain:{value:0},expo:{value:0},contrast:{value:0},sat:{value:0},time:{value:0},aspect:{value:1.7}},
+  vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+  fragmentShader:`uniform sampler2D tDiffuse;uniform float vig,grain,expo,contrast,sat,time,aspect;varying vec2 vUv;
+float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
+void main(){vec4 c=texture2D(tDiffuse,vUv);vec3 col=c.rgb*exp2(expo);col=(col-0.5)*(1.0+contrast/100.0)+0.5;
+float l=dot(col,vec3(0.2126,0.7152,0.0722));col=mix(vec3(l),col,1.0+sat/100.0);
+vec2 d=(vUv-0.5)*vec2(aspect,1.0);col*=1.0-smoothstep(0.2,1.05,length(d))*vig*1.25;
+col+=(h(vUv*vec2(1733.0,977.0)+time)-0.5)*grain*0.22*(1.0-l*0.6);gl_FragColor=vec4(max(col,0.0),c.a);}`};
+let composer=null,bloomP=null,gradeP=null;
+function postFor(game){if(!game)return null;const c=S.objs.find(o=>o.type==='camera');if(!c||!c.cam||!c.cam.post)return null;
+  const v=S.objs.find(o=>o.vol&&o.vol.profile);return v&&Object.keys(v.vol.ov).length?v.vol.ov:null;}
+function renderPost(ov){if(!composer){composer=new T3.EffectComposer(R3);composer.addPass(new T3.RenderPass(scene3,cam3));bloomP=new T3.UnrealBloomPass(new T3.Vector2(256,256),0,.4,.9);composer.addPass(bloomP);
+    composer.addPass(new T3.OutputPass());gradeP=new T3.ShaderPass(GRADE);composer.addPass(gradeP);}
+  composer.setPixelRatio(DPR);composer.setSize(CW,CH);const U=gradeP.uniforms,g=k=>ov[k]||{};
+  bloomP.enabled=!!ov.bloom&&g('bloom').intensity>0;bloomP.strength=(g('bloom').intensity||0)*.6;bloomP.threshold=g('bloom').threshold==null?.9:g('bloom').threshold;
+  U.vig.value=g('vignette').intensity||0;U.grain.value=g('grain').intensity||0;U.expo.value=g('color').postExposure||0;U.contrast.value=g('color').contrast||0;U.sat.value=g('color').saturation||0;
+  U.time.value=(performance.now()%10000)/10000*91.7;U.aspect.value=CW/CH;composer.render();}
 let skyKey=null;
 const lerpC=(a,b,k)=>'#'+hex2rgb(a).map((v,i)=>Math.round(v+(hex2rgb(b)[i]-v)*k).toString(16).padStart(2,'0')).join('');
 function setSky(e){const k=Math.round(e*50);if(k===skyKey)return;skyKey=k;let top,bot;
@@ -523,7 +633,7 @@ function setSky(e){const k=Math.round(e*50);if(k===skyKey)return;skyKey=k;let to
   else{const f=clamp(-e/.25,0,1);top=lerpC('#3b4a7a','#070b18',f);bot=lerpC('#f0a060','#1b2340',f);}
   const old=BG.game;BG.game=gradTex(top,bot);if(old)old.dispose();}
 // 前后对比：左边用灰盒材质再画一次
-const cmp={on:false,x:.5};const GREYM=new T3.MeshStandardMaterial({color:0x9a9a9a,roughness:1});
+const cmp={on:false,x:.5};const GREYM=new T3.MeshStandardMaterial({color:0x9a9a9a,roughness:1,shadowSide:T3.FrontSide});
 function setGrey(on){for(const m of M3.values())m.traverse(n=>{if(!n.isMesh)return;if(on){n.userData._m=n.material;n.material=GREYM;}else if(n.userData._m){n.material=n.userData._m;delete n.userData._m;}});}
 // NavMesh 蓝色区域（只在场景视图显示）
 let navMesh3=null,navKey='';
@@ -536,7 +646,7 @@ function syncNav(){const nv=NAV(),k=nv?nv.x0+','+nv.z0+','+nv.nx+','+nv.nz+','+n
 function activeCam(){if(S.tab==='game'){const c=S.objs.find(o=>o.type==='camera');return c?{pos:wPos(c),M:wRot(c),fov:60}:null;}
   const M=eulerM([V.pitch,V.yaw,0]);return {pos:sub(V.target,mul(M[2],V.dist)),M,fov:60};}
 function resize(){const r=$('#cwrap').getBoundingClientRect();DPR=window.devicePixelRatio||1;CW=Math.max(50,r.width);CH=Math.max(50,r.height);
-  R3.setPixelRatio(DPR);R3.setSize(CW,CH,false);gz.width=CW*DPR;gz.height=CH*DPR;}
+  R3.setPixelRatio(DPR);R3.setSize(CW,CH,false);gz.width=CW*DPR;gz.height=CH*DPR;if(composer){composer.setPixelRatio(DPR);composer.setSize(CW,CH);}}
 function segDist(px,py,a,b){const dx=b[0]-a[0],dy=b[1]-a[1];const l=dx*dx+dy*dy||1;const tt=clamp(((px-a[0])*dx+(py-a[1])*dy)/l,0,1);return Math.hypot(px-(a[0]+tt*dx),py-(a[1]+tt*dy));}
 const RC=new T3.Raycaster();
 // 从某个世界点朝某个方向射一条线，返回先打中的物体（模拟 Physics.Raycast：只打有碰撞体的物体）
@@ -547,10 +657,10 @@ function draw(){
   const game=S.tab==='game',selSet=new Set(game?[]:selIds());const cam=activeCam();icons=[];handles=[];
   gctx.setTransform(DPR,0,0,DPR,0,0);gctx.clearRect(0,0,CW,CH);
   if(!cam){R3.setClearColor(0x000000,1);R3.clear();gctx.fillStyle='#fff';gctx.font='14px sans-serif';gctx.textAlign='center';gctx.fillText('No cameras rendering',CW/2,CH/2);LV=null;return;}
-  sync3(selSet);syncNav();if(navMesh3)navMesh3.visible=!game;grid.visible=!game;scene3.background=BG[game?'game':'scene'];
+  sync3(selSet);syncNav();if(navMesh3)navMesh3.visible=!game;grid.visible=!game;applyLighting(game);
   const Mc=cam.M,p=cam.pos;cam3.matrixWorld.copy(tMat(new T3.Matrix4().set(Mc[0][0],Mc[1][0],Mc[2][0],p[0],Mc[0][1],Mc[1][1],Mc[2][1],p[1],Mc[0][2],Mc[1][2],Mc[2][2],p[2],0,0,0,1)));
   cam3.matrixWorldInverse.copy(cam3.matrixWorld).invert();cam3.fov=cam.fov;cam3.aspect=CW/CH;cam3.updateProjectionMatrix();
-  R3.render(scene3,cam3);renderUI(game);
+  const ov=postFor(game);if(ov)renderPost(ov);else R3.render(scene3,cam3);renderUI(game);
   if(cmp.on){setGrey(true);R3.setScissorTest(true);R3.setScissor(0,0,CW*cmp.x,CH);R3.render(scene3,cam3);R3.setScissorTest(false);setGrey(false);}
   const f=(CH/2)/Math.tan(cam.fov*Math.PI/360);LV={cam,f};
   const toV=q=>mTV(cam.M,sub(q,cam.pos)),pr=v=>[CW/2+v[0]/v[2]*f,CH/2-v[1]/v[2]*f];
@@ -562,7 +672,7 @@ function draw(){
       const txt=rayInfo.h?t('rayHit',rayInfo.h.o.name,rayInfo.h.d.toFixed(1)):t('rayNone');gctx.font='12px '+getComputedStyle(document.body).fontFamily;const w=gctx.measureText(txt).width+16;
       gctx.fillStyle='rgba(10,12,16,.7)';gctx.fillRect(CW/2-w/2,CH-40,w,22);gctx.fillStyle='#fff';gctx.textAlign='center';gctx.fillText(txt,CW/2,CH-25);
       if(document.pointerLockElement!==cv){gctx.fillStyle='rgba(10,12,16,.7)';const t2=t('clickToLook'),w2=gctx.measureText(t2).width+16;gctx.fillRect(CW/2-w2/2,52,w2,22);gctx.fillStyle="#fff";gctx.fillText(t2,CW/2,67);}}
-    drawCompare();return;}
+    drawSounds();drawCompare();return;}
   // 场景视图：射线（红线）、导航路径、碰撞体线框（绿）、摄像机和灯的图标、移动箭头
   if(rayInfo){gctx.strokeStyle='#ff5050';gctx.lineWidth=2;gctx.beginPath();line(rayInfo.from,add(rayInfo.from,mul(rayInfo.dir,rayInfo.h?rayInfo.h.d:30)));gctx.stroke();
     if(rayInfo.h){const v=toV(rayInfo.h.p);if(v[2]>.1){const q=pr(v);gctx.fillStyle='#ff5050';gctx.beginPath();gctx.arc(q[0],q[1],5,0,7);gctx.fill();}}}
@@ -580,11 +690,30 @@ function draw(){
       else if(k==='sphere'){ring(o,0,.5,'y',hot);ring(o,0,.5,'x',hot);ring(o,0,.5,'z',hot);}
       else{ring(o,.5,.5,'y',hot);ring(o,-.5,.5,'y',hot);ring(o,0,.5,'x',hot);ring(o,0,.5,'z',hot);wire(o,[[-.5,-.5,-.5],[.5,.5,.5]],hot);}}
     if(o.cc&&selSet.has(o.id)){ring(o,1,.5,'y');ring(o,-1,.5,'y');ring(o,0,1,'x');}}
+  // 选中的点光源 / 聚光灯 / 音频源：画出范围
+  for(const id of selSet){const o=obj(id);if(!o)continue;const wp=wPos(o);
+    const circ=(r,axis,col,dash)=>{gctx.strokeStyle=col;gctx.lineWidth=1.3;gctx.setLineDash(dash||[]);gctx.beginPath();let prev=null;
+      for(let k=0;k<=48;k++){const a=k/48*Math.PI*2,c=Math.cos(a)*r,s2=Math.sin(a)*r;const q=add(wp,axis==='y'?[c,0,s2]:axis==='x'?[0,c,s2]:[c,s2,0]);if(prev)line(prev,q);prev=q;}gctx.stroke();gctx.setLineDash([]);};
+    if(o.light&&o.light.kind==='point'){['x','y','z'].forEach(ax=>circ(o.light.range,ax,'rgba(255,226,120,.75)'));}
+    if(o.light&&o.light.kind==='spot'){const R=wRot(o),rg=o.light.range,ha=clamp(o.light.angle,1,179)/2*Math.PI/180,rr=Math.tan(ha)*rg,end=add(wp,mul(mMV(R,[0,0,1]),rg));
+      gctx.strokeStyle='rgba(255,226,120,.8)';gctx.lineWidth=1.3;gctx.beginPath();let prev=null;
+      for(let k=0;k<=40;k++){const a=k/40*Math.PI*2,q=add(end,mMV(R,[Math.cos(a)*rr,Math.sin(a)*rr,0]));if(prev)line(prev,q);prev=q;if(k%10===0)line(wp,q);}gctx.stroke();}
+    if(o.audio){const b=o.audio.blend||0;if(b>0){circ(Math.min(o.audio.maxDist||500,60),'y','rgba(127,209,255,.8)',[6,4]);circ(Math.max(.05,o.audio.minDist||1),'y','rgba(127,209,255,.8)');}}}
+  // 教练给的蓝图：要放墙的位置（蓝色虚线框），放好了变绿
+  for(const g of lessonGhosts()){const b=[g.min,g.max],P8=[];for(let i=0;i<8;i++)P8.push([b[i&1][0],b[i>>1&1][1],b[i>>2&1][2]]);
+    gctx.strokeStyle=g.done?'rgba(110,230,140,.85)':'rgba(90,170,255,.95)';gctx.lineWidth=g.done?1.4:2;gctx.setLineDash(g.done?[]:[7,5]);gctx.beginPath();
+    [[0,1],[2,3],[4,5],[6,7],[0,2],[1,3],[4,6],[5,7],[0,4],[1,5],[2,6],[3,7]].forEach(([a,c])=>line(P8[a],P8[c]));gctx.stroke();gctx.setLineDash([]);
+    if(!g.done&&g.label){const v=toV(mul(add(g.min,g.max),.5));if(v[2]>.2){const q=pr(v);gctx.font='12px '+getComputedStyle(document.body).fontFamily;gctx.textAlign='center';
+      const w=gctx.measureText(g.label).width+12;gctx.fillStyle='rgba(20,60,120,.85)';gctx.fillRect(q[0]-w/2,q[1]-11,w,18);gctx.fillStyle='#fff';gctx.fillText(g.label,q[0],q[1]+2);}}}
   // 摆放检查标出来的空角落
   for(const mk of layMarks){const v=toV(mk.p);if(v[2]<.1)continue;const q=pr(v);gctx.strokeStyle='#f2c230';gctx.lineWidth=2.5;gctx.beginPath();gctx.arc(q[0],q[1],Math.max(14,320/v[2]),0,7);gctx.stroke();
     gctx.font='12px '+getComputedStyle(document.body).fontFamily;gctx.textAlign='center';gctx.fillStyle='#f2c230';gctx.fillText(t('emptyHere'),q[0],q[1]+4);}
   const sel=selObj();
   for(const o of S.objs){
+    if(o.type==='empty'&&o.audio){const wp=wPos(o),v=toV(wp);if(v[2]<.1)continue;const c=pr(v),isSel=selSet.has(o.id),age=performance.now()-((sounds.get(o.id)||{}).t||-1e9);
+      const pulse=sounds.has(o.id)&&(sounds.get(o.id).loop||age<400)?1+.25*Math.sin(performance.now()/120):1;
+      gctx.strokeStyle=gctx.fillStyle=isSel?'#ff9a1f':'#7fd1ff';gctx.lineWidth=1.6;gctx.beginPath();gctx.moveTo(c[0]-7,c[1]-3);gctx.lineTo(c[0]-3,c[1]-3);gctx.lineTo(c[0]+2,c[1]-7);gctx.lineTo(c[0]+2,c[1]+7);gctx.lineTo(c[0]-3,c[1]+3);gctx.lineTo(c[0]-7,c[1]+3);gctx.closePath();gctx.fill();
+      gctx.beginPath();gctx.arc(c[0]+2,c[1],7*pulse,-.8,.8);gctx.stroke();icons.push({id:o.id,x:c[0],y:c[1],r:16});continue;}
     if(o.type!=='camera'&&o.type!=='light')continue;
     const wp=wPos(o),R=wRot(o),v=toV(wp);if(v[2]<.1)continue;const c=pr(v);const isSel=selSet.has(o.id);
     gctx.strokeStyle=isSel?'#ff9a1f':'rgba(235,240,248,.85)';gctx.lineWidth=isSel?2:1.2;
@@ -594,9 +723,11 @@ function draw(){
         q2.forEach(q=>{gctx.moveTo(c[0],c[1]);gctx.lineTo(q[0],q[1]);});gctx.stroke();}
       gctx.fillStyle=isSel?'#ff9a1f':'#cfd8e6';gctx.fillRect(c[0]-6,c[1]-4,12,8);
     }else{
-      const e=toV(add(wp,mul(mMV(R,[0,0,1]),2)));
-      if(e[2]>.05){const q=pr(e);gctx.beginPath();gctx.moveTo(c[0],c[1]);gctx.lineTo(q[0],q[1]);gctx.stroke();}
-      gctx.fillStyle='#ffd75e';gctx.beginPath();gctx.arc(c[0],c[1],6,0,7);gctx.fill();
+      const kind=o.light?o.light.kind:'directional';
+      if(kind!=='point'){const e=toV(add(wp,mul(mMV(R,[0,0,1]),2)));
+        if(e[2]>.05){const q=pr(e);gctx.beginPath();gctx.moveTo(c[0],c[1]);gctx.lineTo(q[0],q[1]);gctx.stroke();}}
+      gctx.fillStyle=o.light?o.light.color:'#ffd75e';gctx.beginPath();gctx.arc(c[0],c[1],6,0,7);gctx.fill();gctx.strokeStyle='rgba(0,0,0,.5)';gctx.lineWidth=1;gctx.stroke();
+      if(kind==='point'){gctx.strokeStyle='rgba(255,215,94,.8)';gctx.beginPath();gctx.arc(c[0],c[1],10,0,7);gctx.stroke();}
     }
     icons.push({id:o.id,x:c[0],y:c[1],r:16});
   }
@@ -614,6 +745,11 @@ function draw(){
   }
   drawCompare();
 }
+// 播放中的声音写在游戏画面左下角（听不到声音的时候也看得到）
+function drawSounds(){if(!S.playing)return;const now=performance.now(),list=[...sounds.values()].filter(v=>v.loop?v.h&&v.h.playing():now-v.t<Math.max(350,v.len*700));if(!list.length)return;
+  gctx.font='12px '+getComputedStyle(document.body).fontFamily;gctx.textAlign='left';
+  list.slice(0,4).forEach((v,i)=>{const y=CH-30-i*24,txt='♪ '+v.name,w=gctx.measureText(txt).width+62;gctx.fillStyle='rgba(10,12,16,.7)';gctx.fillRect(10,y-15,w,20);
+    gctx.fillStyle='#fff';gctx.fillText(txt,17,y);gctx.fillStyle='rgba(255,255,255,.25)';gctx.fillRect(w-40,y-8,32,5);gctx.fillStyle='#7fd1ff';gctx.fillRect(w-40,y-8,32*clamp(v.g,0,1),5);});}
 function drawCompare(){if(!cmp.on)return;const x=CW*cmp.x;gctx.fillStyle='#f0b24a';gctx.fillRect(x-1,0,2,CH);
   gctx.font='12px '+getComputedStyle(document.body).fontFamily;const lab=(txt,px,al)=>{const w=gctx.measureText(txt).width+14;const bx=al==='r'?px-w-8:px+8;gctx.fillStyle='rgba(10,12,16,.72)';gctx.fillRect(bx,CH-30,w,20);gctx.fillStyle='#fff';gctx.textAlign='left';gctx.fillText(txt,bx+7,CH-16);};
   lab(t('beforeLbl'),x,'r');lab(t('afterLbl'),x,'l');}
@@ -683,8 +819,10 @@ function propThumb(k){if(thumbs[k])return thumbs[k];
   const cam=new T3.PerspectiveCamera(35,1.2,.05,100);cam.position.set(size*1.5,cy+size*.8,size*1.9);cam.lookAt(0,cy,0);
   thumbR.render(sc,cam);thumbs[k]=thumbR.domElement.toDataURL();return thumbs[k];}
 function openLibrary(){const P=PROPS();
-  openFloat('lib',t('library'),`<p class="fnote">${esc(t('libNote'))}</p><div class="libgrid">${Object.keys(P).map(k=>`<div class="libcard"><img src="${propThumb(k)}" alt="" width="120" height="100"><b>${esc(L(P[k]))}</b><button class="btn" data-imp="${k}">${t('importBtn')}</button></div>`).join('')}</div>`,
-    f=>f.addEventListener('click',e=>{const b=e.target.closest('[data-imp]');if(b)importProp(b.dataset.imp);}));}
+  const C=ZTG.audio?ZTG.audio.clips:{};
+  openFloat('lib',t('library'),`<p class="fnote">${esc(t('libNote'))}</p><div class="libgrid">${Object.keys(P).map(k=>`<div class="libcard"><img src="${propThumb(k)}" alt="" width="120" height="100"><b>${esc(L(P[k]))}</b><button class="btn" data-imp="${k}">${t('importBtn')}</button></div>`).join('')}</div>
+  <div class="subh">${t('soundsH')}</div><p class="fnote">${esc(t('soundsNote'))}</p><div class="libgrid">${Object.keys(C).map(k=>`<div class="libcard"><div class="sndic">${IC.audio(36)}</div><b>${esc(C[k].name)}</b><span class="fnote">${esc(L(C[k]))}</span><div class="gact"><button class="btn quiet" data-prev="${k}" aria-label="${t('previewBtn')}">▶</button><button class="btn" data-snd="${k}">${t('importBtn')}</button></div></div>`).join('')}</div>`,
+    f=>f.addEventListener('click',e=>{const b=e.target.closest('[data-imp]');if(b)importProp(b.dataset.imp);const sn=e.target.closest('[data-snd]');if(sn)importSound(sn.dataset.snd);const pv=e.target.closest('[data-prev]');if(pv&&ZTG.audio)ZTG.audio.play(pv.dataset.prev,{volume:.9});}));}
 function openSnaps(){
   openFloat('snaps',t('snapsT'),snaps.length?`<div class="snapgrid">${snaps.map((x,i)=>`<figure><img src="${x.img}" alt=""><figcaption>${esc(t('snapN',x.n))} · ${x.t}<span class="sp"></span><button class="ibtn rm" data-snapdel="${i}" aria-label="✕">✕</button></figcaption></figure>`).join('')}</div><div class="gact"><button class="btn quiet" data-snapclear>${t('clearAll')}</button></div>`:`<p class="fnote">${esc(t('snapsEmpty'))}</p>`,
     f=>f.addEventListener('click',e=>{const d=e.target.closest('[data-snapdel]');if(d){snaps.splice(+d.dataset.snapdel,1);saveSnaps();openSnaps();}else if(e.target.closest('[data-snapclear]')){snaps=[];saveSnaps();openSnaps();}}));}
@@ -695,13 +833,39 @@ let appVersion='0.1.0';
 function openSettings(){const z=SET.zoom||1;
   openFloat('settings',t('settingsT'),`<div class="setrow"><b>${t('langL')}</b><div class="seg"><button data-lang="zh" class="${ZTG.lang()==='zh'?'on':''}">中文</button><button data-lang="en" class="${ZTG.lang()==='en'?'on':''}">English</button></div></div>
   <div class="setrow"><b>${t('fontL')}</b><div class="seg">${[.9,1,1.15,1.3].map(v=>`<button data-zoom="${v}" class="${Math.abs(v-z)<.01?'on':''}">${t('font_'+Math.round(v*100))}</button>`).join('')}</div></div>
+  <div class="setrow"><b>${t('soundL')}</b><div class="seg"><button data-snd="1" class="${soundOn?'on':''}">${t('on')}</button><button data-snd="0" class="${soundOn?'':'on'}">${t('off')}</button></div></div>
   <div class="setrow"><b>${t('hintsL')}</b><label class="ck"><input type="radio" name="hints" value="tiered"${SET.hints!=='always'?' checked':''}> ${t('hintsTiered')}</label><label class="ck"><input type="radio" name="hints" value="always"${SET.hints==='always'?' checked':''}> ${t('hintsAlways')}</label></div>
   <div class="setrow"><b>${t('updateL')}</b><div><button class="btn" data-upd>${t('checkUpdate')}</button></div><div class="fnote" id="updres"></div></div>
   <div class="setrow"><b>${t('aboutL')}</b><p class="fnote">${esc(t('aboutText',appVersion))}</p></div>`,
   f=>{f.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
       if(b.dataset.lang){if(b.dataset.lang!==ZTG.lang())toggleLang();}else if(b.dataset.zoom){setSetting('zoom',+b.dataset.zoom);openSettings();}
+      else if(b.dataset.snd){soundOn=b.dataset.snd==='1';setSetting('sound',soundOn);if(ZTG.audio)ZTG.audio.setMuted(!soundOn);openSettings();}
       else if(b.hasAttribute('data-upd'))checkUpdates(true);else if(b.hasAttribute('data-open-rel')&&window.ztgApp)ztgApp.openRelease();});
     f.addEventListener('change',e=>{if(e.target.name==='hints'){setSetting('hints',e.target.value);hintT=performance.now();renderGuide();updateHint();}});});}
+// 灯光窗口（Window → Rendering → Lighting）：环境（天空盒、环境光）和雾
+const ENVPAL=['#000000','#0b0c10','#1a1c22','#363636','#808080','#2a1a1a','#1a2433','#c9d6e8'];
+function openLighting(){const e=S.env;
+  const sel=(b,lab,opts,cur)=>`<select class="schemesel" data-env="${b}" aria-label="${esc(t(lab))}">${opts.map(([v,tk])=>`<option value="${v}"${v===cur?' selected':''}>${t(tk)}</option>`).join('')}</select>`;
+  const colr=(b,lab,v)=>`<div><div class="slot"><span class="sw" style="background:${esc(v)}"></span><input class="hexin" data-env="${b}" value="${esc(v)}" maxlength="7" aria-label="${esc(t(lab))}"></div><div class="pal">${ENVPAL.map(c=>`<button data-envc="${b}" data-c="${c}" style="background:${c}" aria-label="${t('colorAria',c)}"></button>`).join('')}</div></div>`;
+  const num=(b,lab,v)=>`<div class="vin" style="max-width:110px"><input inputmode="decimal" data-env="${b}" value="${fmt(v)}" aria-label="${esc(t(lab))}"></div>`;
+  const row=(lab,html)=>`<div class="setrow"><b>${t(lab)}</b>${html}</div>`;
+  openFloat('lighting',t('lightingT'),`<div class="subh">${t('envTab')}</div>
+  ${row('skyboxMat',sel('skybox','skyboxMat',[['1','defaultSkybox'],['0','noneOpt']],e.skybox?'1':'0'))}
+  ${row('envSource',sel('src','envSource',[['skybox','srcSkybox'],['color','srcColor']],e.src))}
+  ${e.src==='color'?row('ambientColor',colr('amb','ambientColor',e.amb)):row('intensityMul',num('mul','intensityMul',e.mul))}
+  <div class="subh">${t('otherSettings')}</div>
+  <div class="setrow"><label class="ck"><input type="checkbox" data-env="fog"${e.fog?' checked':''}> <b${tip('fog')}>${t('fogL')}</b></label></div>
+  ${e.fog?row('colorL',colr('fogColor','colorL',e.fogColor))+row('fogModeL',sel('fogMode','fogModeL',[['linear','fogLinear'],['exp','fogExp'],['exp2','fogExp2']],e.fogMode))+
+    (e.fogMode==='linear'?row('fogStart',num('start','fogStart',e.start))+row('fogEnd',num('end','fogEnd',e.end)):row('densityL',num('density','densityL',e.density))):''}
+  <p class="fnote">${esc(t('lightingNote'))}</p>`,
+  f=>{f.addEventListener('change',ev=>{const k=ev.target.dataset.env;if(k)setEnv(k,ev.target.type==='checkbox'?ev.target.checked:ev.target.value);});
+    f.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&ev.target.dataset.env)ev.target.blur();});
+    f.addEventListener('click',ev=>{const b=ev.target.closest('[data-envc]');if(b)setEnv(b.dataset.envc,b.dataset.c);});});}
+function setEnv(k,v){const e=S.env;
+  if(k==='skybox')e.skybox=v==='1';else if(k==='fog')e.fog=!!v;else if(k==='src'||k==='fogMode')e[k]=v;
+  else if(k==='amb'||k==='fogColor'){if(/^#[0-9a-f]{6}$/i.test(v))e[k]=v.toLowerCase();}
+  else{const n=parseFloat(String(v).replace(',','.'));if(!isNaN(n))e[k]=k==='mul'?clamp(n,0,8):Math.max(0,n);}
+  commit();openLighting();}
 function openShortcuts(){openFloat('shortcuts',t('shortcutsT'),`<table class="ptable sctable">${t('sc').map(([k,d])=>`<tr><td><kbd>${esc(k)}</kbd></td><td>${esc(d)}</td></tr>`).join('')}</table>`);}
 async function checkUpdates(manual){const show=h=>{const el=$('#updres');if(el)el.innerHTML=h;};
   if(!window.ztgApp||!ztgApp.checkUpdate){if(manual)show(esc(t('updateNA')));return;}
@@ -713,7 +877,7 @@ async function checkUpdates(manual){const show=h=>{const el=$('#updres');if(el)e
   }catch(e){if(manual)show(esc(t('updateErr')));}}
 $('#updbanner').addEventListener('click',()=>{if(window.ztgApp)ztgApp.openRelease();});
 $('#setbtn').addEventListener('click',openSettings);$('#helpbtn').addEventListener('click',openShortcuts);
-const FLOATS={lib:openLibrary,snaps:openSnaps,prefs:openPrefs,settings:openSettings,shortcuts:openShortcuts};
+const FLOATS={lighting:openLighting,lib:openLibrary,snaps:openSnaps,prefs:openPrefs,settings:openSettings,shortcuts:openShortcuts};
 
 /* ---------- 导出到真 Unity：把脚本和一份「怎么做」清单打成 zip ---------- */
 function crc32(b){let crc=-1;for(let i=0;i<b.length;i++){let c=(crc^b[i])&255;for(let k=0;k<8;k++)c=c&1?(c>>>1)^0xEDB88320:c>>>1;crc=(crc>>>8)^c;}return (crc^-1)>>>0;}
@@ -729,11 +893,20 @@ const scriptText=a=>tmplOf(a).lines.map(l=>l.c.map(x=>typeof x==='string'?x:Stri
 function exportGuide(l){const zh=l==='zh',v3=v=>`(${v.map(fmt).join(', ')})`,out=[CHAP.exportIntro[l]];
   const ms=S.assets.filter(a=>a.type==='material');
   if(ms.length){out.push(zh?'## 材质\n':'## Materials\n');ms.forEach(m=>out.push(`- ${zh?'项目窗口右键 → 创建 → 材质':'Project window right-click → Create → Material'}: **${m.name}**, Base Map \`${m.color}\`${(m.shader||'URP/Lit')!=='URP/Lit'?` (Shader: ${m.shader})`:''}`));out.push('');}
+  const e=S.env,de=defEnv();
+  if(JSON.stringify(e)!==JSON.stringify(de)){out.push(zh?'## 灯光窗口（Window → Rendering → Lighting → Environment）\n':'## Lighting window (Window → Rendering → Lighting → Environment)\n');
+    if(!e.skybox)out.push('- Skybox Material: None');
+    out.push(`- Environment Lighting Source: ${e.src==='color'?'Color, Ambient Color '+e.amb:'Skybox, Intensity Multiplier '+fmt(e.mul)}`);
+    if(e.fog)out.push(`- Other Settings → Fog ✓, Color ${e.fogColor}, Mode ${{linear:'Linear',exp:'Exponential',exp2:'Exponential Squared'}[e.fogMode]}, ${e.fogMode==='linear'?`Start ${fmt(e.start)}, End ${fmt(e.end)}`:`Density ${fmt(e.density)}`}`);
+    out.push('');}
+  const au=S.assets.filter(a=>a.type==='audio');
+  if(au.length){out.push(zh?'## 声音\n':'## Sounds\n');au.forEach(a=>out.push(`- **${a.name}**: ${zh?'模拟器用代码合成的声音。真 Unity 里换成你自己的音频文件（例如免费的 CC0 音效），拖进项目窗口就行。':'made by the simulator in code. In real Unity, use your own audio file (for example a free CC0 sound) and drag it into the Project window.'}`));out.push('');}
   out.push(zh?'## 物体（按层级顺序）\n':'## Objects (in Hierarchy order)\n');
   const how=o=>{if(o.type==='camera'||o.type==='light'&&o.name===ZTG.tl(l,'nLight'))return zh?'新场景自带':'comes with a new scene';
     if(SHAPES.includes(o.type))return (zh?'层级右键 → 3D 对象 → ':'Hierarchy right-click → 3D Object → ')+ZTG.tl('en',o.type);
     if(o.type==='empty')return zh?'层级右键 → 创建空物体':'Hierarchy right-click → Create Empty';
-    if(o.type==='light')return zh?'层级右键 → 灯光 → 方向光':'Hierarchy right-click → Light → Directional Light';
+    if(o.type==='light'){const k=o.light?o.light.kind:'directional',en={directional:'Directional Light',point:'Point Light',spot:'Spotlight'}[k];return (zh?'层级右键 → 灯光 → ':'Hierarchy right-click → Light → ')+en;}
+    if(o.vol)return zh?'菜单 GameObject → Volume → Global Volume':'GameObject menu → Volume → Global Volume';
     if(isUI(o)||o.type==='eventsystem')return zh?'层级右键 → UI → '+o.type.replace('ui',''):'Hierarchy right-click → UI → '+o.type.replace('ui','');
     if(isModel(o))return zh?`素材库模型（${L(PROPS()[o.model]||{zh:'',en:''})}）：真 Unity 里可以用 Kenney 等免费模型代替`:`Asset Library model (${(PROPS()[o.model]||{}).en}): in real Unity use a free model, e.g. from Kenney`;return o.type;};
   const walk=(o,d)=>{const ind='  '.repeat(d),m=matOf(o);out.push(`${ind}- **${o.name}** — ${how(o)}${par(o)?(zh?`，放在 ${par(o).name} 下面`:`, as a child of ${par(o).name}`):''}`);
@@ -744,6 +917,10 @@ function exportGuide(l){const zh=l==='zh',v3=v=>`(${v.map(fmt).join(', ')})`,out
     if(o.rb)out.push(`${ind}  - ${zh?'添加组件 → 物理 → 刚体':'Add Component → Physics → Rigidbody'}`);
     if(o.cc)out.push(`${ind}  - ${zh?'添加组件 → 物理 → 角色控制器':'Add Component → Physics → Character Controller'}`);
     if(o.agent)out.push(`${ind}  - ${zh?'添加组件 → 导航 → NavMesh 代理':'Add Component → Navigation → NavMesh Agent'}`);
+    if(o.light&&o.type==='light'){const li=o.light;out.push(`${ind}  - Light: Color ${li.color}, Intensity ${fmt(li.intensity)}${li.kind!=='directional'?`, Range ${fmt(li.range)}`:''}${li.kind==='spot'?`, Outer Spot Angle ${fmt(li.angle)}`:''}`);}
+    if(o.cam&&o.cam.post)out.push(`${ind}  - ${zh?'摄像机 → Rendering → 勾选 Post Processing':'Camera → Rendering → check Post Processing'}`);
+    if(o.audio){const au=o.audio,cl=au.clip!=null?asset(au.clip):null;out.push(`${ind}  - ${zh?'添加组件 → 音频 → 音频源':'Add Component → Audio → Audio Source'}: ${cl?cl.name:'None'}, Play On Awake ${au.awake?'✓':'✗'}, Loop ${au.loop?'✓':'✗'}, Volume ${fmt(au.volume)}, Spatial Blend ${fmt(au.blend)}, Min/Max Distance ${fmt(au.minDist)}/${fmt(au.maxDist)}`);}
+    if(o.vol){const v=o.vol;out.push(`${ind}  - ${zh?'Volume 组件：Profile 点 New，再 Add Override → Post-processing → ':'Volume: click New for the Profile, then Add Override → Post-processing → '}${Object.keys(v.ov).map(k=>`${ZTG.tl('en',OVK[k])} (${OV[k].map(([pp])=>`${ZTG.tl('en','ov_'+pp)} ${fmt(v.ov[k][pp])}`).join(', ')})`).join('; ')||'—'}`);}
     if(o.navs)out.push(`${ind}  - ${zh?'添加组件 → NavMesh Surface，点 Bake（需要 AI Navigation 包）':'Add Component → NavMesh Surface, click Bake (needs the AI Navigation package)'}`);
     o.scripts.forEach(sc=>{const a=asset(sc.asset);if(!a)return;const vals=Object.entries(sc.vals||{}).map(([k,v])=>`${k} = ${Array.isArray(v)?v.map(id=>(asset(id)||{}).name).join(', '):typeof v==='number'?fmt(v):v!=null&&obj(v)?obj(v).name:'None'}`).join('; ');
       out.push(`${ind}  - ${zh?'把脚本拖上去':'Drag the script onto it'}: ${a.name}${vals?` (${vals})`:''}`);});
@@ -790,8 +967,8 @@ cv.addEventListener('pointerdown',e=>{
 addEventListener('mousemove',e=>{if(document.pointerLockElement===cv||(drag&&drag.t==='look')){mdx+=e.movementX;mdy+=e.movementY;}});
 cv.addEventListener('pointermove',e=>{if(!drag||drag.t==='look')return;const r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;
   if(drag.t==='orbit'){V.yaw-=(e.clientX-drag.x)*.4;V.pitch=clamp(V.pitch+(e.clientY-drag.y)*.3,4,86);drag.x=e.clientX;drag.y=e.clientY;}
-  else if(drag.t==='axis'){const tt=axisParam(x,y,drag.start,drag.h.dir);if(tt!=null){const d=tt-drag.t0;drag.tg.forEach(q=>setWorldPos(q,add(drag.starts.get(q.id),mul(drag.h.dir,d))));if(Math.abs(d)>.05)S.flags.moved=true;refreshLive();}}
-  else if(drag.t==='e'){const dx=e.clientX-drag.x;drag.tg.forEach(q=>{const r0=drag.rots.get(q.id);q.rot=[r0[0],r0[1]+dx*.6,r0[2]];});if(Math.abs(dx)>6)S.flags.rotated=true;refreshLive();}
+  else if(drag.t==='axis'){const tt=axisParam(x,y,drag.start,drag.h.dir);if(tt!=null){let d=tt-drag.t0;if(e.ctrlKey||e.metaKey)d=Math.round(d);drag.tg.forEach(q=>setWorldPos(q,add(drag.starts.get(q.id),mul(drag.h.dir,d))));if(Math.abs(d)>.05)S.flags.moved=true;refreshLive();}}
+  else if(drag.t==='e'){const dx=e.clientX-drag.x;let ang=dx*.6;if(e.ctrlKey||e.metaKey)ang=Math.round(ang/15)*15;drag.tg.forEach(q=>{const r0=drag.rots.get(q.id);q.rot=[r0[0],rnd(r0[1]+ang),r0[2]];});if(Math.abs(dx)>6)S.flags.rotated=true;refreshLive();}
   else if(drag.t==='r'){const k=clamp(1+(e.clientX-drag.x)*.01,.1,6);drag.tg.forEach(q=>{if(q.prefab&&!q.scaleOverride)q.scaleOverride=true;q.scale=drag.scs.get(q.id).map(v=>v*k);});if(Math.abs(k-1)>.05)S.flags.scaled=true;refreshLive();}
 });
 const endDrag=()=>{if(drag&&drag.t!=='orbit'&&drag.t!=='look')commit();drag=null;};
@@ -819,19 +996,26 @@ const HINT={
   field:b=>`#insp-body [data-bind="${b}"]`,
   mi:k=>`.cm .cmi[data-k="${k}"]`,
   isSel:x=>!!(x&&S.sel&&S.sel.id===x.id),
-  reach,objScreen,handleAt};
+  reach,objScreen,handleAt,
+  // 世界坐标 → 屏幕坐标（给箭头指向场景里的某个位置）
+  wpt:p=>{if(!LV)return null;const v=mTV(LV.cam.M,sub(p,LV.cam.pos));if(v[2]<.2)return null;const r=cv.getBoundingClientRect(),x=r.left+CW/2+v[0]/v[2]*LV.f,y=r.top+CH/2-v[1]/v[2]*LV.f;
+    return x>r.left&&x<r.right&&y>r.top&&y<r.bottom?{x,y}:null;}};
 
 /* 把引擎能力交给 chapters/ 里的章节文件用 */
 Object.defineProperty(ZTG,'S',{get:()=>S,configurable:true});
 Object.assign(ZTG,{WORDER,WSEL,mkObj,mkAsset,select,P,FL,near,effScale,matOf,mats,asset,makePrefab,spawn,saveScene,ensureMats,instCount,isGray,isOrange,
   stopPlay,addScript,addRigidbody,setParent:reparent,compileScript,closeCode,bakeNav,inCameraView,setSetting,buildExport,enterMode,
+  lib:()=>LIB(),mkLight,wPos,wAABB,colBounds,uniqueName,importSound,openLighting,closeFloat,floatOpen:()=>floatId,isMesh,TAGS,
+  setView:(target,dist,yaw,pitch)=>{V.target=target.slice();if(dist)V.dist=dist;if(yaw!=null)V.yaw=yaw;if(pitch!=null)V.pitch=pitch;},
   codeOpen:()=>codeId,codeDraft:b=>{const el=$(`#modal .blank[data-b="${b}"]`);return el?el.value:'';},codeDirty:()=>codeIsDirty(),hint:HINT});
 
-const CHAP=ZTG.chapters.ch0;
-const STEPS=CHAP.steps;
+let CHAP=ZTG.chapters.ch0,STEPS=CHAP.steps;
+function setChap(){CHAP=ZTG.chapters['ch'+chapNum()]||ZTG.chapters.ch0;STEPS=CHAP.steps;}
+// 教练给的蓝图框（例如第 1 章要放墙的位置）
+function lessonGhosts(){if(!isLesson()||!S||S.playing||S.tab!=='scene'||S.step>=STEPS.length||!STEPS[S.step].ghosts)return [];try{return STEPS[S.step].ghosts()||[];}catch(e){return [];}}
 
 function stepDone(i){const st=STEPS[i];return st.conds.every(c=>!!c[1]());}
-function winClick(key){if(S.step!==0||S.playing)return;const n=WORDER.find(k=>!S.flags.win.includes(k));if(key!==n)return;S.flags.win.push(key);S.flags.winMsg='win_'+key;commit();}
+function winClick(key){if(MODE!=='ch0'||S.step!==0||S.playing)return;const n=WORDER.find(k=>!S.flags.win.includes(k));if(key!==n)return;S.flags.win.push(key);S.flags.winMsg='win_'+key;commit();}
 function updateFlags(){const c=instCount();S.flags.maxInst=Math.max(S.flags.maxInst,c);const p=P();
   if(p&&p.prefab&&S.prefabs[p.prefab]&&S.prefabs[p.prefab].scale[0]>=1.5&&c>=3)S.flags.wide=true;}
 // 提示分级：先只有发亮的边框；点「给我提示」出文字；再点「指给我看」出箭头；最后才有「帮我做这一步」。卡住 25 秒自动升一级。
@@ -841,10 +1025,10 @@ function freeGuide(){return `<div class="gbody"><div class="gstep">${t('freeTitl
 const bugRes=()=>CHAP.bugs.list.map(b=>{try{return !!b.check();}catch(e){return false;}});
 const bugSig=()=>'bugs|'+bugRes().join('')+'|'+[...bugHintOpen].join(',');
 function bugsGuide(){const B=CHAP.bugs.list,res=bugRes(),all=res.every(Boolean);
-  return `<div class="gbody"><div class="gstep">${t('chN',0)}</div><h2>${t('bugsTitle')}</h2><p>${esc(t('bugsIntro'))}</p><ul class="conds">${B.map((b,i)=>`<li class="${res[i]?'done':''}"><span class="chk"></span><span>${esc(L(b.title))}${!res[i]?(bugHintOpen.has(i)?`<div class="hint" style="margin-top:4px">${esc(L(b.hint))}</div>`:` <button class="btn quiet small" data-act="bughint" data-i="${i}">${t('bugHint')}</button>`):''}</span></li>`).join('')}</ul>
+  return `<div class="gbody"><div class="gstep">${t('chN',chapNum())}</div><h2>${t('bugsTitle')}</h2><p>${esc(t('bugsIntro'))}</p><ul class="conds">${B.map((b,i)=>`<li class="${res[i]?'done':''}"><span class="chk"></span><span>${esc(L(b.title))}${!res[i]?(bugHintOpen.has(i)?`<div class="hint" style="margin-top:4px">${esc(L(b.hint))}</div>`:` <button class="btn quiet small" data-act="bughint" data-i="${i}">${t('bugHint')}</button>`):''}</span></li>`).join('')}</ul>
   ${all?`<div class="winmsg">${esc(t('bugsDone'))}</div><div class="gact"><button class="btn primary" data-act="reset">${t('bugsAgain')}</button><button class="btn quiet" data-act="home">${t('backHome')}</button></div>`:''}</div>`;}
 function quizHTML(){const Q=CHAP.quiz,n=Q.length;
-  if(quiz.i>=n){const best=Math.max(quiz.score,+(lsGet('ztg.ch0.quiz')||0));lsSet('ztg.ch0.quiz',String(best));
+  if(quiz.i>=n){const qk='ztg.ch'+chapNum()+'.quiz',best=Math.max(quiz.score,+(lsGet(qk)||0));lsSet(qk,String(best));
     return `<div class="gstep">${t('quizBtn')}</div><h2>${esc(t('quizResult',quiz.score,n))}</h2><p>${esc(t('quizBest',best))}</p><div class="gact"><button class="btn primary" data-act="qagain">${t('quizAgain')}</button><button class="btn quiet" data-act="home">${t('backHome')}</button></div>`;}
   const q=Q[quiz.i],pk=quiz.picked;
   return `<div class="gstep">${t('quizQ',quiz.i+1,n)}</div><h2>${esc(L(q.q))}</h2><div class="qopts">${q.o.map((o,k)=>`<button class="qopt${pk==null?'':k===q.a?' right':k===pk?' wrongp':''}" data-act="qa" data-k="${k}"${pk!=null?' disabled':''}>${esc(L(o))}</button>`).join('')}</div>
@@ -852,7 +1036,7 @@ function quizHTML(){const Q=CHAP.quiz,n=Q.length;
 function renderGuide(){
   const g=$('#guide-body');
   if(MODE==='free'){g.innerHTML=freeGuide();linkTerms($('.gbody',g));S.sig='free';return;}
-  if(MODE==='bugs'){g.innerHTML=bugsGuide();linkTerms($('.gbody',g));S.sig=bugSig();return;}
+  if(isBugs()){g.innerHTML=bugsGuide();linkTerms($('.gbody',g));S.sig=bugSig();return;}
   if(S.step>=STEPS.length){markDone();g.innerHTML=`<div class="gbody">${quiz?quizHTML():L(CHAP.finish)}</div>`;return;}
   if(hintStep!==S.step){hintStep=S.step;hintLv=0;hintT=performance.now();}
   const lv=effLv();
@@ -865,9 +1049,9 @@ function renderGuide(){
   linkTerms($('.gbody',g));
   S.sig=S.step+'|'+res.join('')+'|'+S.flags.winMsg;
 }
-function updateGlow(){$$('.glow').forEach(e=>e.classList.remove('glow'));if(MODE!=='ch0'||S.step>=STEPS.length)return;const st=STEPS[S.step];if(S.step>0&&stepDone(S.step))return;
+function updateGlow(){$$('.glow').forEach(e=>e.classList.remove('glow'));if(!isLesson()||S.step>=STEPS.length)return;const st=STEPS[S.step];if(S.step>0&&stepDone(S.step))return;
   st.glow().forEach(s=>$$(s).forEach(e=>e.classList.add('glow')));}
-function checkGuide(){updateFlags();if(MODE==='bugs'){if(bugSig()!==S.sig)renderGuide();return;}if(MODE!=='ch0'||S.step>=STEPS.length)return;const st=STEPS[S.step];const sig=S.step+'|'+st.conds.map(c=>!!c[1]()).join('')+'|'+S.flags.winMsg;
+function checkGuide(){updateFlags();if(isBugs()){if(bugSig()!==S.sig)renderGuide();return;}if(!isLesson()||S.step>=STEPS.length)return;const st=STEPS[S.step];const sig=S.step+'|'+st.conds.map(c=>!!c[1]()).join('')+'|'+S.flags.winMsg;
   if(sig!==S.sig){hintT=performance.now();renderGuide();updateGlow();}}
 $('#guide-body').addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
   if(a==='next'&&!b.disabled){S.step++;S.flags.winMsg='';if(S.step<STEPS.length&&STEPS[S.step].enter)STEPS[S.step].enter();commit();}
@@ -919,11 +1103,13 @@ function resolvePt(x){
   if(typeof x==='object'&&'x' in x)return x;
   for(const el of $$(x)){const r=el.getBoundingClientRect();
     if(r.width<1||r.height<1||r.bottom<0||r.right<0||r.top>innerHeight||r.left>innerWidth)continue;
-    const box=el.closest('.pb,.code');if(box){const q=box.getBoundingClientRect();if(r.bottom<q.top+2||r.top>q.bottom-2)continue;}
+    // 在可以滚动的面板里、被挡住了：先滚过去（例如层级很长时，Player 在最下面）
+    const box=el.closest('.pb,.code');if(box){let q=box.getBoundingClientRect();if(r.bottom<q.top+2||r.top>q.bottom-2){const sc=el.closest('#hier-body,#insp-body,#proj-body');if(!sc)continue;
+      el.scrollIntoView({block:'nearest'});const r2=el.getBoundingClientRect();q=box.getBoundingClientRect();if(r2.bottom<q.top+2||r2.top>q.bottom-2)continue;return {x:r2.left+r2.width/2,y:r2.top+r2.height/2,r:r2,el};}}
     return {x:r.left+r.width/2,y:r.top+r.height/2,r,el};}
   return null;}
 function pickHint(){
-  if(!$('#home').hidden||MODE!=='ch0'||S.step>=STEPS.length)return null;
+  if(!$('#home').hidden||!isLesson()||S.step>=STEPS.length)return null;
   const st=STEPS[S.step];
   if(stepDone(S.step)){const a=resolvePt('#guide-body [data-act="next"]');return a&&{a,label:t('hNext')};}
   if(S.playing&&!st.play){const a=resolvePt('#playbtn');return a&&{a,label:t('hStopFirst')};}
@@ -1014,7 +1200,25 @@ const head=tk=>`<h4><span${tip(tk)}>${t(tk)}</span></h4>`;
 const rmBtn=c=>`<span class="sp"></span><button class="ibtn rm" data-act="rmcomp" data-c="${c}" title="${esc(t('removeComp'))}" aria-label="${esc(t('removeComp'))}">✕</button>`;
 const headRm=(tk,c)=>`<h4><span${tip(tk)}>${t(tk)}</span>${rmBtn(c)}</h4>`;
 const REF_NAME={uislider:'Slider',uitext:'TMP_Text',uiimage:'Image',uibutton:'Button'};
-const PAL=['#ffffff','#c9ccd1','#8a8f98','#4a4d52','#1c1d20','#ff8a1f','#e5484d','#f2c230','#3fbf6a','#2c6bd1','#7a4fd0','#8a5a3b'];
+const numRow=(tk,b,v,extra)=>`<div class="vrow"><label${tip(tk)}>${t(tk)}</label><div class="vin" style="max-width:110px"><input inputmode="decimal" data-bind="${b}" value="${fmt(v)}" aria-label="${esc(t(tk))}"${extra||''}></div></div>`;
+const colRow=(tk,b,v,pal)=>`<div class="vrow"><label>${t(tk)}</label><div class="slot"><span class="sw" style="background:${esc(v)}"></span><input class="hexin" data-bind="${b}" value="${esc(v)}" maxlength="7" aria-label="${esc(t(tk))}"></div></div>${pal?`<div class="pal">${pal.map(c=>`<button data-act="setc" data-b="${b}" data-c="${c}" style="background:${c}" aria-label="${t('colorAria',c)}"></button>`).join('')}</div>`:''}`;
+const LPAL=['#ffffff','#fff4e5','#ffd6a0','#ffb46b','#ff7a3a','#ff3b2f','#a8c8ff','#8affc1'];
+function lightInsp(o){const L_=o.light||mkLight('directional'),k=L_.kind;
+  return `<div class="comp">${head('light')}<div class="vrow"><label>${t('type')}</label><select class="schemesel" data-bind="ltype" aria-label="${t('type')}">${['directional','point','spot'].map(x=>`<option value="${x}"${x===k?' selected':''}>${t('lt_'+x)}</option>`).join('')}</select></div>
+  ${colRow('colorL','lcolor',L_.color,LPAL)}${numRow('intensity','lint',L_.intensity)}${k!=='directional'?numRow('rangeL','lrange',L_.range):''}${k==='spot'?numRow('spotAngle','langle',L_.angle):''}</div>`;}
+function audioInsp(o){const au=o.audio,cl=au.clip!=null?asset(au.clip):null;
+  return `<div class="comp">${headRm('audioSource','audio')}<div class="vrow"><label>${t('audioGen')}</label><div class="slot objref${cl?'':' none'}" data-drop="aclip:${o.id}" title="${esc(t('dropClip'))}">${cl?IC.audio(12)+' '+esc(cl.name):'None (Audio Clip)'}${cl?`<span class="sp"></span><button class="ibtn rm" data-act="clrclip" aria-label="✕">✕</button>`:''}</div></div>
+  ${ck('playOnAwake','aawake',au.awake)}${ck('loopL','aloop',au.loop)}${numRow('volumeL','avol',au.volume)}
+  <div class="vrow"><label${tip('spatialBlend')}>${t('spatialBlend')}</label><div class="blend"><span>2D</span><input type="range" min="0" max="1" step="0.05" data-bind="ablend" value="${au.blend}" aria-label="${t('spatialBlend')}"><span>3D</span><b>${fmt(au.blend)}</b></div></div>
+  <div class="subh">${t('sound3d')}</div>${numRow('minDist','amin',au.minDist)}${numRow('maxDist','amax',au.maxDist)}</div>`;}
+// Volume 的覆盖项（Override）：每项几个参数和默认值（和 URP 一样，默认值都没有效果）
+const OV={bloom:[['threshold',.9],['intensity',0]],color:[['postExposure',0],['contrast',0],['saturation',0]],grain:[['intensity',0]],vignette:[['intensity',0]]};
+const OVK={bloom:'bloom',color:'colorAdj',grain:'filmGrain',vignette:'vignette'};
+function volInsp(o){const v=o.vol;
+  return `<div class="comp">${headRm('volumeComp','vol')}${kv('modeL','Global')}<div class="vrow"><label>${t('profile')}</label><div class="slot${v.profile?'':' none'}">${v.profile?esc(v.profile):'None'}${v.profile?'':`<span class="sp"></span><button class="btn small" data-act="volnew">${t('newBtn')}</button>`}</div></div>
+  ${Object.keys(v.ov).map(k=>`<div class="ovr"><h5><span${tip(OVK[k])}>${t(OVK[k])}</span><span class="sp"></span><button class="ibtn rm" data-act="rmov" data-k="${k}" aria-label="${esc(t('removeComp'))}">✕</button></h5>${OV[k].map(([pp])=>numRow('ov_'+pp,'vo.'+k+'.'+pp,v.ov[k][pp])).join('')}</div>`).join('')}
+  <div class="gact" style="margin-top:6px"><button class="btn" id="addov" data-act="addov" data-plus="1"${v.profile?'':' disabled'}>${t('addOverride')}</button></div></div>`;}
+const PAL=['#ffffff','#c9ccd1','#8a8f98','#5c5650','#4a4d52','#34302c','#1c1d20','#ff8a1f','#e5484d','#f2c230','#3fbf6a','#2c6bd1','#7a4fd0','#8a5a3b'];
 function scriptHTML(o,s,i){const a=asset(s.asset),tm=a?tmplOf(a):null,nm=a?a.name:t('missing');
   const fields=(tm&&LIB()[a.name]?tm.fields||[]:[]).map(f=>{const v=s.vals?s.vals[f.id]:null;
     if(f.type==='transform'||f.type==='ref'){const tg=v!=null?obj(v):null;const none=f.type==='ref'?`None (${REF_NAME[f.accept]||'Object'})`:t('noneTransform');
@@ -1041,7 +1245,8 @@ function renderInsp(){
   const b=$('#insp-body');const o=selObj(),a=selAsset(),os=selObjs();
   if(os.length>1){
     b.innerHTML=`<div class="comp"><input class="nameinput" value="—" disabled aria-label="${t('objName')}"><div class="multi">${t('nSelected',os.length)}</div></div>
-    <div class="comp">${head('transform')}${vec('position','pos',mixed(os,q=>q.pos))}${vec('rotation','rot',mixed(os,q=>q.rot))}${vec('scale','scl',mixed(os,q=>effScale(q)))}</div>`;
+    <div class="comp">${head('transform')}${vec('position','pos',mixed(os,q=>q.pos))}${vec('rotation','rot',mixed(os,q=>q.rot))}${vec('scale','scl',mixed(os,q=>effScale(q)))}</div>
+    ${os.every(isMesh)?(()=>{const m0=matOf(os[0]),same=os.every(q=>q.mat===os[0].mat);return `<div class="comp">${head('meshRenderer')}<label style="font-size:11px;color:var(--muted)">${t('matSlotMany')}</label><div class="slot" data-drop="objs"><span class="sw" style="background:${same&&m0?esc(m0.color):'#cdcdcd'}"></span>${same?(m0?esc(m0.name):'Default-Material'):'—'}</div></div>`;})():''}`;
   }else if(o){const sc=effScale(o),m=matOf(o);
     // 加上去的组件按添加顺序排，和真 Unity 一样
     const added=[...o.scripts.map((s,i)=>({seq:s.seq||0,html:scriptHTML(o,s,i)})),
@@ -1049,6 +1254,8 @@ function renderInsp(){
       ...(o.rb?[{seq:o.rb.seq||0,html:`<div class="comp">${headRm('rigidbody','rb')}${kv('mass','1')}${ck('useGravity','rbg',o.rb.useGravity)}${ck('isKinematic','rbk',o.rb.isKinematic)}</div>`}]:[]),
       ...(o.cc?[{seq:o.cc.seq||0,html:`<div class="comp">${headRm('characterController','cc')}${kv('height','2')}${kv('radius','0.5')}${kv('stepOffset','0.3')}</div>`}]:[]),
       ...(o.agent?[{seq:o.agent.seq||0,html:`<div class="comp">${headRm('navAgent','agent')}<div class="vrow"><label>${t('agentSpeed')}</label><div class="vin" style="max-width:110px"><input inputmode="decimal" data-bind="agspd" value="${fmt(o.agent.speed)}" aria-label="${t('agentSpeed')}"></div></div></div>`}]:[]),
+      ...(o.audio?[{seq:o.audio.seq||0,html:audioInsp(o)}]:[]),
+      ...(o.vol?[{seq:o.vol.seq||0,html:volInsp(o)}]:[]),
       ...(o.navs?[{seq:o.navs.seq||0,html:`<div class="comp">${headRm('navSurface','navs')}<div class="kv">${o.navs.baked?t('navBaked',o.navs.baked.w.split('1').length-1):t('navNone')}</div><div class="gact" style="margin-top:6px"><button class="btn" data-act="bake">${t('bake')}</button><button class="btn quiet" data-act="clearnav">${t('clearNav')}</button></div></div>`}]:[])
     ].sort((x,y)=>x.seq-y.seq);
     b.innerHTML=`<div class="comp"><input class="nameinput" data-bind="name" value="${esc(o.name)}" aria-label="${t('objName')}">
@@ -1057,8 +1264,8 @@ function renderInsp(){
     ${o.prefab?`<div style="margin-top:6px;color:var(--accent);font-size:12px">${IC.cube(12)} <span${tip('prefabInst')}>${t('prefabInst')}</span><span class="tag">${esc((S.prefabs[o.prefab]||{}).name||'')}</span></div>`:''}</div>
     ${uiInsp(o)||`<div class="comp">${head('transform')}${vec('position','pos',o.pos.map(fmt))}${vec('rotation','rot',o.rot.map(fmt))}${vec('scale','scl',sc.map(fmt),o.prefab&&!o.scaleOverride?`<span class="tag">${t('fromPrefab')}</span>`:'')}</div>`}
     ${o.type==='eventsystem'?`<div class="comp">${head('eventSystem')}<div class="kv">Input System UI Input Module</div></div>`:''}
-    ${o.type==='camera'?`<div class="comp">${head('camera')}${kv('clearFlags',t('skybox'))}${kv('fov','60')}${kv('projection',t('perspective'))}</div>`:''}
-    ${o.type==='light'?`<div class="comp">${head('light')}${kv('type',t('directional'))}${kv('intensity','1')}</div>`:''}
+    ${o.type==='camera'?`<div class="comp">${head('camera')}${kv('clearFlags',t('skybox'))}${kv('fov','60')}${kv('projection',t('perspective'))}<div class="subh">${t('renderingL')}</div>${ck('postProcessing','campost',o.cam&&o.cam.post)}</div><div class="comp">${head('audioListener')}</div>`:''}
+    ${o.type==='light'?lightInsp(o):''}
     ${isModel(o)?`<div class="comp">${head('meshRenderer')}<label style="font-size:11px;color:var(--muted)">${t('modelMat')}</label><div class="slot" data-drop="obj:${o.id}">${m?`<span class="sw" style="background:${esc(m.color)}"></span>${esc(m.name)}`:esc(L(PROPS()[o.model]||{zh:'',en:''}))}</div></div>`:''}
     ${isMesh(o)?`<div class="comp">${head('meshRenderer')}<label style="font-size:11px;color:var(--muted)">${t('matSlot')}</label><div class="slot" data-drop="obj:${o.id}"><span class="sw" style="background:${m?esc(m.color):'#cdcdcd'}"></span>${m?esc(m.name):'Default-Material'}</div></div>`:''}
     ${added.map(x=>x.html).join('')}
@@ -1069,6 +1276,7 @@ function renderInsp(){
       <div class="comp"><h4>${t('palette')}<span class="sp"></span><select class="schemesel" data-bind="scheme" aria-label="${t('palette')}">${['analog','complement','triad','mono'].map(k=>`<option value="${k}"${k===palScheme?' selected':''}>${t(k)}</option>`).join('')}</select></h4><div class="pal palgen">${paletteOf(palBase.get(a.id)||a.color,palScheme).map(c=>`<button data-act="color" data-c="${c}" style="background:${c}" aria-label="${t('colorAria',c)}" title="${c}"></button>`).join('')}</div><button class="btn" data-act="palmats">${t('palMats')}</button></div>`;
     else if(a.type==='script'){const st=!a.comp?`<div class="kv">${t('notCompiled')}</div>`:a.comp.ok?`<div class="kv okc">${t('scriptOk')}</div>`:`<div class="kv bad">${t('scriptErrs',a.comp.errs.length)}</div>`;
       inner+=`<div class="comp">${head('monoscript')}${st}<button class="btn" data-act="openscript" data-id="${a.id}">${t('openCode')}</button>${!LIB()[a.name]?`<div class="warnbox">${esc(t('nameMismatch',a.name))}</div>`:''}</div>`;}
+    else if(a.type==='audio'){const c=(ZTG.audio&&ZTG.audio.clips[a.clip])||{len:0};inner+=`<div class="comp">${head('audioClip')}${kv('lengthL',fmt(c.len)+' s')}<p class="fnote">${esc(L(c))}</p><button class="btn" data-act="preview" data-k="${esc(a.clip)}">▶ ${t('previewBtn')}</button></div>`;}
     else if(a.type==='itemdata')inner+=`<div class="comp">${head('itemDataT')}<div class="vrow"><label>${t('itemName')}</label><input class="hexin" data-bind="iname" value="${esc(a.itemName||'')}" aria-label="${t('itemName')}"></div><div class="vrow"><label>${t('iconColor')}</label><div class="slot"><span class="sw" style="background:${esc(a.color)}"></span><input class="hexin" data-bind="icolor" value="${esc(a.color)}" maxlength="7" aria-label="${t('iconColor')}"></div></div>${ck('stackable','istack',a.stackable)}<div class="vrow"><label>${t('maxStack')}</label><div class="vin" style="max-width:110px"><input inputmode="decimal" data-bind="imax" value="${a.maxStack}" aria-label="${t('maxStack')}"></div></div></div>`;
     else if(a.type==='prefab'){const pf=S.prefabs[a.prefabId];inner+=`<div class="comp">${head('prefabAsset')}${kv('instances',S.objs.filter(x=>x.prefab===a.prefabId).length)}${pf?vec('pscl','pscl',pf.scale.map(fmt)):''}</div>`;}
     else inner+=`<div class="comp">${kv('type',t(a.type==='folder'?'folder':'sceneT'))}</div>`;
@@ -1081,6 +1289,7 @@ function syncInspector(){const o=selObj(),a=selAsset(),tg=selIds().length>1?selO
     else if(o&&k==='fv'&&o.scripts[i]&&o.scripts[i].vals&&typeof o.scripts[i].vals[f]==='number')v=fmt(o.scripts[i].vals[f]);
     else if(a&&k==='pscl'&&S.prefabs[a.prefabId])v=fmt(S.prefabs[a.prefabId].scale[i]);
     else if(o&&o.ui&&k==='uval')v=fmt(o.ui.value);
+    else if(o&&o.light&&k==='lint')v=fmt(o.light.intensity);
     if(v!=null&&inp.value!==v)inp.value=v;});}
 $('#insp-body').addEventListener('change',e=>{const el=e.target,b=el.dataset.bind;if(!b)return;const [k,i,f]=b.split('.');const o=selObj(),a=selAsset();
   const tg=selIds().length>1?selObjs():(o?[o]:[]);
@@ -1098,6 +1307,13 @@ $('#insp-body').addEventListener('change',e=>{const el=e.target,b=el.dataset.bin
   else if(o&&o.ui&&k==='utext')o.ui.text=el.value;
   else if(o&&o.ui&&(k==='ucolor'||k==='ufill')){if(/^#[0-9a-f]{6}$/i.test(el.value))o.ui[k==='ucolor'?'color':'fill']=el.value.toLowerCase();}
   else if(o&&o.ui&&['ux','uy','uw','uh','usize','uval'].includes(k)){if(!isNaN(num))o.ui[{ux:'x',uy:'y',uw:'w',uh:'h',usize:'size',uval:'value'}[k]]=k==='uval'?clamp(num,0,1):num;}
+  else if(o&&o.light&&k==='ltype')o.light.kind=el.value;
+  else if(o&&o.light&&k==='lcolor'){if(/^#[0-9a-f]{6}$/i.test(el.value))o.light.color=el.value.toLowerCase();}
+  else if(o&&o.light&&(k==='lint'||k==='lrange'||k==='langle')){if(!isNaN(num))o.light[{lint:'intensity',lrange:'range',langle:'angle'}[k]]=k==='langle'?clamp(num,1,179):Math.max(0,num);}
+  else if(o&&o.audio&&k==='aawake')o.audio.awake=el.checked;else if(o&&o.audio&&k==='aloop')o.audio.loop=el.checked;
+  else if(o&&o.audio&&(k==='avol'||k==='ablend'||k==='amin'||k==='amax')){if(!isNaN(num))o.audio[{avol:'volume',ablend:'blend',amin:'minDist',amax:'maxDist'}[k]]=k==='avol'||k==='ablend'?clamp(num,0,1):Math.max(.01,num);}
+  else if(o&&o.cam&&k==='campost')o.cam.post=el.checked;
+  else if(o&&o.vol&&k==='vo'&&o.vol.ov[i]){if(!isNaN(num))o.vol.ov[i][f]=f==='saturation'||f==='contrast'?clamp(num,-100,100):f==='postExposure'?clamp(num,-10,10):i==='bloom'?Math.max(0,num):clamp(num,0,1);}
   else if(a&&k==='iname')a.itemName=el.value;
   else if(a&&k==='icolor'){if(/^#[0-9a-f]{6}$/i.test(el.value))a.color=el.value.toLowerCase();}
   else if(a&&k==='istack')a.stackable=el.checked;
@@ -1119,6 +1335,13 @@ $('#insp-body').addEventListener('click',e=>{const b=e.target.closest('[data-act
   else if(act==='bake'&&o&&o.navs)bakeNav(o);
   else if(act==='clearnav'&&o&&o.navs){o.navs.baked=null;log('info','lNavCleared');commit();}
   else if(act==='clrref'&&o){const s=o.scripts[+b.dataset.i];if(s&&s.vals)s.vals[b.dataset.f]=null;commit();}
+  else if(act==='setc'){const inp=$(`#insp-body [data-bind="${b.dataset.b}"]`);if(inp){inp.value=b.dataset.c;inp.dispatchEvent(new Event('change',{bubbles:true}));}}
+  else if(act==='clrclip'&&o&&o.audio){o.audio.clip=null;commit();}
+  else if(act==='preview'&&ZTG.audio){ZTG.audio.play(b.dataset.k,{volume:.9});}
+  else if(act==='volnew'&&o&&o.vol){o.vol.profile='Global Volume Profile';log('info','lProfile');commit();}
+  else if(act==='rmov'&&o&&o.vol){delete o.vol.ov[b.dataset.k];commit();}
+  else if(act==='addov'&&o&&o.vol&&o.vol.profile){const r=b.getBoundingClientRect();
+    openMenu([{tk:'postProc',k:'postproc',children:Object.keys(OV).sort((x,y)=>t(OVK[x]).localeCompare(t(OVK[y]))).map(k=>({tk:OVK[k],k:'ov_'+k,dis:!!o.vol.ov[k],fn:()=>{o.vol.ov[k]=Object.fromEntries(OV[k]);commit();}}))}],r.left,r.bottom+2);}
   else if(act==='rmlist'&&o){const s=o.scripts[+b.dataset.i];if(s&&s.vals&&s.vals[b.dataset.f])s.vals[b.dataset.f].splice(+b.dataset.k,1);commit();}});
 
 function commit(){trackUndo();S.dirty=snapJson()!==S.savedJson;updateFlags();renderChrome();renderHier();renderProj();renderInsp();renderGuide();updateGlow();updateHint();saveProgress();}
@@ -1173,6 +1396,8 @@ function performDrop(pl,tgt,x,y){const [kind,ids]=pl.split(':');const id=+ids;co
     if(dv.startsWith('alist:')){const [,oid,si,fid]=dv.split(':');const host=obj(+oid),s=host&&host.scripts[+si];if(!s)return;
       if(a.type!=='itemdata'){log('warn','lWrongRef','ItemData');toast(t('lWrongRef','ItemData'));commit();return;}
       s.vals=s.vals||{};(s.vals[fid]=s.vals[fid]||[]).push(a.id);commit();return;}
+    if(dv==='objs'){const os=selObjs().filter(isRender);if(a.type!=='material'||!os.length){log('warn','lBadDrop');commit();return;}os.forEach(q=>{q.mat=a.id;});log('info','lMatMany',a.name,os.length);toast(t('lMatMany',a.name,os.length));commit();return;}
+    if(dv.startsWith('aclip:')){const host=obj(+dv.slice(6));if(!host||!host.audio)return;if(a.type!=='audio'){log('warn','lWrongRef','AudioClip');toast(t('lWrongRef','AudioClip'));commit();return;}host.audio.clip=a.id;commit();return;}
     if(dv.startsWith('obj:'))applyAsset(a,obj(+dv.slice(4)));
     else if(dv==='scene'&&S.tab==='scene'){const r=cv.getBoundingClientRect(),cx=x-r.left,cy=y-r.top;
       if(a.type==='prefab')spawn(a,groundPt(cx,cy)||[0,.5,0]);else if(a.type==='model')spawnModel(a,groundPt(cx,cy));else{const hit=pickAt(cx,cy);if(hit)applyAsset(a,obj(hit));else log('warn','lMissed'),commit();}}
@@ -1237,7 +1462,7 @@ function runViz(moving,looking){if(codeId==null)return;const a=asset(codeId);if(
   const live=S.playing&&!!LIB()[a.name]&&a.comp&&a.comp.ok&&S.objs.some(o=>o.scripts.some(s=>s.asset===a.id&&s.enabled));const tmn=performance.now();
   $$('#modal .cl').forEach((r,i)=>{const l=tm.lines[i];if(!l)return;
     r.classList.toggle('run',!!(live&&(l.run==='update'||l.run==='move'||l.run==='look')));
-    r.classList.toggle('hot',!!(live&&((l.run==='start'&&tmn<codeHot)||(l.key&&keys.has(l.key))||(l.run==='move'&&moving===a.id)||(l.run==='look'&&looking))));});
+    r.classList.toggle('hot',!!(live&&((l.run==='start'&&tmn<codeHot)||(l.run==='trigger'&&tmn<(trigFlash.get(a.id)||0))||(l.key&&keys.has(l.key))||(l.run==='move'&&moving===a.id)||(l.run==='look'&&looking))));});
   const cr=$('#crun');if(cr){const s=live?t('runCount',updCount):'';if(cr.textContent!==s)cr.textContent=s;}}
 
 /* ---------- menus, play, keys ---------- */
@@ -1247,7 +1472,7 @@ const MENUS={
     {tk:'dup',k:'dup',fn:duplicateSel,dis:!selIds().length},{tk:'copy',k:'copy',fn:copySel,dis:!selIds().length},{tk:'paste',k:'paste',fn:pasteClip,dis:!clip},{tk:'del',k:'del',fn:deleteSel},
     {tk:'clearPrefs',k:'clearprefs',fn:()=>{prefsSet({});log('info','lPrefsCleared');toast(t('lPrefsCleared'));commit();if(floatId==='prefs')openPrefs();}}],
   go:()=>items3D(),
-  window:()=>[{tk:'libraryM',k:'library',fn:openLibrary},{tk:'snapsM',k:'snaps',fn:openSnaps},{tk:'prefsM',k:'prefs',fn:openPrefs},{tk:'settingsM',k:'settings',fn:openSettings},{tk:'shortcutsM',k:'shortcuts',fn:openShortcuts},{tk:'layouts',k:'layouts',children:[{tk:'default',k:'default',fn:()=>{S.tab='scene';commit();toast(t('layoutReset'));}}]}]};
+  window:()=>[{tk:'renderingM',k:'rendering',children:[{tk:'lightingM',k:'lighting',fn:openLighting}]},{tk:'libraryM',k:'library',fn:openLibrary},{tk:'snapsM',k:'snaps',fn:openSnaps},{tk:'prefsM',k:'prefs',fn:openPrefs},{tk:'settingsM',k:'settings',fn:openSettings},{tk:'shortcutsM',k:'shortcuts',fn:openShortcuts},{tk:'layouts',k:'layouts',children:[{tk:'default',k:'default',fn:()=>{S.tab='scene';commit();toast(t('layoutReset'));}}]}]};
 $$('.mbtn').forEach(b=>b.addEventListener('click',()=>{const was=b.classList.contains('open');closeMenu();if(was)return;const r=b.getBoundingClientRect();b.classList.add('open');openMenu(MENUS[b.dataset.menu](),r.left,r.bottom+2);b.classList.add('open');}));
 function startPlay(){if(S.playing)return;
   S.assets.forEach(a=>{const tm=a.type==='script'&&LIB()[a.name];if(tm&&!tm.blanks.length&&!a.comp)compileScript(a);});
@@ -1257,37 +1482,43 @@ function startPlay(){if(S.playing)return;
   for(const o of S.objs)for(const s of o.scripts){const a=asset(s.asset);const tm=a&&LIB()[a.name];if(!s.enabled||!tm||!a.comp||!a.comp.ok)continue;
     const ln=blankPos('msg',{},tm).line;if(ln>=0)S.logs.push({t:now8(),k:'raw',a:[a.comp.rt.msg],type:'info',src:{a:a.id,l:ln}});
     if(tm.kind==='inventory')startInventory(o,s,a,tm);}
+  S.frozen=false;stopSounds();walkedNow=new Set();for(const o of S.objs)if(o.audio&&o.audio.awake&&o.audio.clip!=null)playSource(o);
   commit();}
-function stopPlay(){if(!S.playing)return;const [objs,prefabs]=JSON.parse(S.snap);S.objs=objs;S.prefabs=prefabs;S.playing=false;S.paused=false;
+function stopPlay(){if(!S.playing)return;const [objs,prefabs,en]=JSON.parse(S.snap);S.objs=objs;S.prefabs=prefabs;if(en)S.env=en;S.playing=false;S.paused=false;S.frozen=false;stopSounds();
+  if(S.flags.hitWall)S.flags.fpsStopped=true;
   if(document.pointerLockElement)document.exitPointerLock();trigIn=new Set();agentState.clear();
   if(S.flags.movedInPlay)S.flags.stopped=true;if(S.flags.fell)S.flags.fellStopped=true;
   if(S.sel&&S.sel.k==='obj'){const ids=selIds().filter(id=>obj(id));if(!ids.length)select(null);else S.multi=ids;}
   lastModel=modelJson();log('info','lStop');commit();}
 $('#playbtn').addEventListener('click',()=>S.playing?stopPlay():startPlay());
 $('#pausebtn').addEventListener('click',()=>{if(!S.playing)return;S.paused=!S.paused;commit();});
-function setupMode(){if(MODE==='bugs'){CHAP.bugs.setup();S.savedJson=snapJson();resetUndo();}}
+// 每章可以有自己的初始场景（setup），找 Bug 挑战用坏掉的场景
+function setupMode(){if(isBugs())CHAP.bugs.setup();else if(isLesson()&&CHAP.setup)CHAP.setup();else return;S.objs.forEach(fixObj);S.savedJson=snapJson();resetUndo();}
 function reset(){closeMenu();closeCode();closeFloat();clearProgress();quiz=null;bugHintOpen.clear();init();setupMode();commit();}
-const chapTag=()=>MODE==='free'?t('freeTitle'):MODE==='bugs'?t('chN',0)+' · '+t('bugsTitle'):t('chN',0)+' · '+L(CHAP.title);
+const chapTag=()=>MODE==='free'?t('freeTitle'):isBugs()?t('chN',chapNum())+' · '+t('bugsTitle'):t('chN',chapNum())+' · '+L(CHAP.title);
 function enterMode(m){if(MODE===m)return;if(S.playing)stopPlay();closeMenu();closeCode();closeFloat();saveNow();
-  MODE=m;quiz=null;bugHintOpen.clear();hintStep=-1;if(!loadProgress()){init();setupMode();}
+  MODE=m;setChap();quiz=null;bugHintOpen.clear();hintStep=-1;if(!loadProgress()){init();setupMode();}
   $('#chaptag').textContent=chapTag();commit();}
-const DONE_KEY='ztg.ch0.done';
-function readDone(){try{return localStorage.getItem(DONE_KEY)==='1';}catch(e){return false;}}
-function markDone(){try{localStorage.setItem(DONE_KEY,'1');}catch(e){}}
-function showHome(){if(S.playing)stopPlay();closeMenu();closeCode();closeFloat();saveNow();const st=$('#chap0st');const d=readDone(),step=MODE==='ch0'?S.step:peekStep('ch0');
-  st.textContent=step>0&&step<STEPS.length?t('cont',step+1):d?t('doneAgain'):t('start');st.classList.toggle('done',d&&!(step>0&&step<STEPS.length));
-  const bb=$('#chapbugs');bb.disabled=!d;bb.classList.toggle('locked',!d);$('#chapbugsst').textContent=d?t('open'):t('lockedCh0');
+const doneKey=n=>'ztg.ch'+n+'.done';
+function readDone(n){try{return localStorage.getItem(doneKey(n==null?chapNum():n))==='1';}catch(e){return false;}}
+function markDone(){try{localStorage.setItem(doneKey(chapNum()),'1');}catch(e){}}
+// 主页：每章显示「开始 / 继续（步骤 n）/ 已完成」；找 Bug 挑战在完成那一章之后解锁
+function showHome(){if(S.playing)stopPlay();closeMenu();closeCode();closeFloat();saveNow();
+  for(const n of [0,1]){const st=$('#chap'+n+'st'),ch=ZTG.chapters['ch'+n];if(!st||!ch)continue;const d=readDone(n),step=MODE==='ch'+n?S.step:peekStep('ch'+n),mid=step>0&&step<ch.steps.length;
+    st.textContent=mid?t('cont',step+1):d?t('doneAgain'):t('start');st.classList.toggle('done',d&&!mid);
+    const bb=$(n?'#chapbugs1':'#chapbugs');bb.disabled=!d;bb.classList.toggle('locked',!d);$(n?'#chapbugs1st':'#chapbugsst').textContent=d?t('open'):t('lockedCh',n);}
   $('#home').hidden=false;updateHint();}
 $('#homebtn').addEventListener('click',showHome);
 const openWork=()=>{$('#home').hidden=true;resize();updateHint();};
-$('#chap0').addEventListener('click',()=>{enterMode('ch0');if(S.step>=STEPS.length){quiz=null;reset();}openWork();});
+[0,1].forEach(n=>{$('#chap'+n).addEventListener('click',()=>{enterMode('ch'+n);if(S.step>=STEPS.length){quiz=null;reset();}openWork();});
+  $(n?'#chapbugs1':'#chapbugs').addEventListener('click',()=>{if(!readDone(n))return;enterMode(n?'bugs1':'bugs');openWork();});});
 $('#chapfree').addEventListener('click',()=>{enterMode('free');openWork();});
-$('#chapbugs').addEventListener('click',()=>{if(!readDone())return;enterMode('bugs');openWork();});
 $('#resetbtn').addEventListener('click',reset);
 
 $('#cmpbtn').addEventListener('click',()=>{cmp.on=!cmp.on;$('#cmpbtn').classList.toggle('on',cmp.on);$('#cmpx').hidden=!cmp.on;});
 $('#cmpx').addEventListener('input',e=>{cmp.x=+e.target.value/100;});
 $('#snapbtn').addEventListener('click',takeSnap);
+$('#litbtn').addEventListener('click',()=>{sceneLit=!sceneLit;$('#litbtn').classList.toggle('on',sceneLit);});
 $('#laybtn').addEventListener('click',()=>{if(S.tab!=='scene'){S.tab='scene';}layoutCheck();});
 
 /* ---------- language ---------- */
@@ -1297,13 +1528,15 @@ function applyStatic(){
     if(el.hasAttribute('data-tip'))el.title=ZTG.lang()==='zh'?ZTG.tl('en',el.dataset.i18n):'';});
   $$('[data-i18n-title]').forEach(el=>{el.title=t(el.dataset.i18nTitle);});
   $$('[data-i18n-aria]').forEach(el=>el.setAttribute('aria-label',t(el.dataset.i18nAria)));
-  $('#ch0title').textContent=L(CHAP.title);
-  $('#ch0desc').textContent=t('ch0desc',STEPS.length);
+  $('#ch0title').textContent=L(ZTG.chapters.ch0.title);
+  $('#ch0desc').textContent=t('ch0desc',ZTG.chapters.ch0.steps.length);
+  $('#ch1title').textContent=L(ZTG.chapters.ch1.title);
+  $('#ch1desc').textContent=t('ch1desc',ZTG.chapters.ch1.steps.length);
   $('#chaptag').textContent=chapTag();
   $$('.langbtn').forEach(b=>{b.textContent=ZTG.lang()==='zh'?'English':'中文';});
 }
 // 切换语言时，还没改过名字的默认物体（主摄像机、立方体 (1)……）跟着换成新语言的名字
-const DEFAULT_NAMES=['nCamera','nLight','nCube','nPlane','nFolder','nMaterial','nSphere','nCapsule','nCylinder','nQuad','nEmpty','nCanvas','nText','nImage','nSlider','nButton','nEventSystem'];
+const DEFAULT_NAMES=['nPointLight','nSpotLight','nGlobalVolume','nCamera','nLight','nCube','nPlane','nFolder','nMaterial','nSphere','nCapsule','nCylinder','nQuad','nEmpty','nCanvas','nText','nImage','nSlider','nButton','nEventSystem'];
 function renameDefaults(from,to){
   const pairs=DEFAULT_NAMES.map(k=>[ZTG.tl(from,k),ZTG.tl(to,k)]);
   const ren=x=>{const m=/^(.*?)(\s\(\d+\))?$/.exec(x.name);const p=pairs.find(q=>q[0]===m[1]);if(p)x.name=p[1]+(m[2]||'');};
@@ -1346,18 +1579,19 @@ addEventListener('keyup',e=>keys.delete(e.code));addEventListener('blur',()=>key
 /* ---------- main loop ---------- */
 let last=0,lastTick=0;
 function frame(ts){const dt=Math.min(.05,(ts-last)/1000||0);last=ts;let moving=false,looking=false;
-  if(S.playing&&!S.paused){looking=Math.abs(mdx)+Math.abs(mdy)>0;COLS=colList();const r=runScripts(dt);moving=r.moving;
+  if(S.playing)updateSounds();
+  if(S.playing&&!S.paused&&!S.frozen){looking=Math.abs(mdx)+Math.abs(mdy)>0;COLS=colList();const r=runScripts(dt);moving=r.moving;
     if(codeId!=null&&r.ran.has(codeId))updCount++;
     COLS=colList();rbPhysics(dt);COLS=colList();if(triggers())S.sig='';}
   else{mdx=mdy=0;}
   draw();runViz(moving,looking);
   // 卡住一段时间，提示自动升一级
-  if(MODE==='ch0'&&SET.hints!=='always'&&hintLv<2&&S.step<STEPS.length&&$('#home').hidden&&!stepDone(S.step)&&performance.now()-hintT>25000){hintLv++;hintT=performance.now();renderGuide();updateHint();}
+  if(isLesson()&&SET.hints!=='always'&&hintLv<2&&S.step<STEPS.length&&$('#home').hidden&&!stepDone(S.step)&&performance.now()-hintT>25000){hintLv++;hintT=performance.now();renderGuide();updateHint();}
   if(ts-lastTick>140){lastTick=ts;if(S.playing||drag){syncInspector();if(S.playing&&S.ptab==='console')renderProj();}checkGuide();updateHint();}
   requestAnimationFrame(frame);}
 new ResizeObserver(resize).observe($('#cwrap'));addEventListener('resize',()=>{resize();hKey='';updateHint();});
 if(!loadProgress())init();
-applyStatic();applyZoom();resize();commit();showHome();requestAnimationFrame(frame);
+applyStatic();applyZoom();if(ZTG.audio)ZTG.audio.setMuted(!soundOn);resize();commit();showHome();requestAnimationFrame(frame);
 // 桌面 app 里：读版本号；每天最多自动检查一次更新
 if(window.ztgApp){ztgApp.info().then(i=>{appVersion=i.version;}).catch(()=>{});const today=new Date().toISOString().slice(0,10);if(lsGet('ztg.updchk')!==today){lsSet('ztg.updchk',today);checkUpdates(false);}}
 })();

@@ -229,11 +229,11 @@ const STEPS = [
 const FINISH={
  zh:`<div class="finish"><div class="gstep">完成</div><h2>第 0 章完成：方块能走了</h2>
 <p>你认识了五个窗口，做了方块、地板、材质、预制件和第一段 C#，还学会了播放、刚体和保存。</p>
-<div class="note">下一章：恐怖游戏。黑暗走廊、手电筒、脚步声和一个会追你的怪物。（这个原型暂时只有第 0 章）</div>
+<div class="note">下一章：恐怖游戏。黑暗走廊、手电筒、脚步声和一个会追你的怪物。回到主页就能开始第 1 章。</div>
 <div class="gact"><button class="btn primary" data-act="quiz">章末小测验</button><button class="btn" data-act="export">导出到真 Unity</button><button class="btn" data-act="reset">再玩一遍</button><button class="btn quiet" data-act="home">回到主页</button></div></div>`,
  en:`<div class="finish"><div class="gstep">Done</div><h2>Chapter 0 complete: your cube can walk</h2>
 <p>You met the five windows, made a cube, a floor, materials, a Prefab and your first C# script, and learned Play, Rigidbody and saving.</p>
-<div class="note">Next: a horror game. A dark corridor, a flashlight, footsteps, and a monster that chases you. (This prototype only has Chapter 0 so far.)</div>
+<div class="note">Next: a horror game. A dark corridor, a flashlight, footsteps, and a monster that chases you. Start Chapter 1 from the home screen.</div>
 <div class="gact"><button class="btn primary" data-act="quiz">Chapter quiz</button><button class="btn" data-act="export">Export to real Unity</button><button class="btn" data-act="reset">Play again</button><button class="btn quiet" data-act="home">Back to home</button></div></div>`};
 
 // PlayerMove.cs：代码模板。每行 c 是片段（字符串或空格 {b}），x 是点这一行时的解释，

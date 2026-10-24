@@ -21,7 +21,8 @@
       <button class="chap" id="chap0"><span class="cn" data-i18n="chN" data-n="0">第 0 章</span><b id="ch0title">Unity 入门</b><span class="d" id="ch0desc"></span><span class="st" id="chap0st">开始</span></button>
       <button class="chap" id="chapfree"><span class="cn" data-i18n="practice"></span><b data-i18n="freeTitle"></b><span class="d" data-i18n="freeCard"></span><span class="st" data-i18n="open"></span></button>
       <button class="chap" id="chapbugs"><span class="cn" data-i18n="chN" data-n="0"></span><b data-i18n="bugsTitle"></b><span class="d" data-i18n="bugsCard"></span><span class="st" id="chapbugsst"></span></button>
-      <div class="chap locked"><span class="cn" data-i18n="chN" data-n="1"></span><b data-i18n="ch1t"></b><span class="d" data-i18n="ch1d"></span><span class="st" data-i18n="soon"></span></div>
+      <button class="chap" id="chap1"><span class="cn" data-i18n="chN" data-n="1"></span><b id="ch1title"></b><span class="d" id="ch1desc"></span><span class="st" id="chap1st"></span></button>
+      <button class="chap" id="chapbugs1"><span class="cn" data-i18n="chN" data-n="1"></span><b data-i18n="bugsTitle"></b><span class="d" data-i18n="bugsCard1"></span><span class="st" id="chapbugs1st"></span></button>
       <div class="chap locked"><span class="cn" data-i18n="chN" data-n="2"></span><b data-i18n="ch2t"></b><span class="d" data-i18n="ch2d"></span><span class="st" data-i18n="soon"></span></div>
       <div class="chap locked"><span class="cn" data-i18n="chN" data-n="3"></span><b data-i18n="ch3t"></b><span class="d" data-i18n="ch3d"></span><span class="st" data-i18n="soon"></span></div>
       <div class="chap locked"><span class="cn" data-i18n="chN" data-n="4"></span><b data-i18n="ch4t"></b><span class="d" data-i18n="ch4d"></span><span class="st" data-i18n="soon"></span></div>
@@ -62,7 +63,7 @@
         <button data-tool="q" data-i18n-title="tQ">Q</button><button data-tool="w" data-i18n-title="tW">W</button>
         <button data-tool="e" data-i18n-title="tE">E</button><button data-tool="r" data-i18n-title="tR">R</button>
       </div>
-      <div class="vtools"><button class="ibtn" id="cmpbtn" data-i18n="compare">对比</button><button class="ibtn" id="snapbtn" data-i18n="snapshot">快照</button><button class="ibtn" id="laybtn" data-i18n="layoutCheck">检查摆放</button></div>
+      <div class="vtools"><button class="ibtn on" id="litbtn" data-i18n="sceneLight" data-i18n-title="sceneLightTip">灯光</button><button class="ibtn" id="cmpbtn" data-i18n="compare">对比</button><button class="ibtn" id="snapbtn" data-i18n="snapshot">快照</button><button class="ibtn" id="laybtn" data-i18n="layoutCheck">检查摆放</button></div>
     </div>
     <div class="canvaswrap" id="cwrap" data-drop="scene">
       <canvas id="cv" data-i18n-aria="view3d"></canvas>
@@ -102,7 +103,9 @@
 <script src="vendor/three.js"></script>
 <script src="scripts.js"></script>
 <script src="props.js"></script>
+<script src="audio.js"></script>
 <script src="chapters/ch0.js"></script>
+<script src="chapters/ch1.js"></script>
 <script src="editor.js"></script>
 </body>
 </html>

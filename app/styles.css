@@ -284,3 +284,14 @@ button.chap .st.done{background:var(--ok);color:#fff}
 .updbanner{position:fixed;right:18px;bottom:16px;z-index:970;background:var(--accent);color:var(--accent-fg);border:0;border-radius:8px;padding:8px 14px;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.3)}
 button.chap[disabled]{cursor:not-allowed;border-color:var(--line)}
 button.chap[disabled] .st{background:var(--panel2);color:var(--muted)}
+
+/* 第 1 章：灯光窗口、音频源、Volume */
+.subh{margin:10px 0 4px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.blend{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.blend input{flex:1;min-width:60px;accent-color:var(--accent)}
+.blend b{min-width:28px;text-align:right;color:var(--fg);font-weight:500}
+.ovr{margin:8px 0 2px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel2)}
+.ovr h5{display:flex;align-items:center;margin:0 0 4px;font-size:12px;font-weight:600}
+.sndic{width:120px;height:60px;display:grid;place-items:center;border-radius:6px;background:#1d2b38;color:#7fd1ff}
+.libcard .gact{margin:0;justify-content:center}
+.libcard .fnote{margin:0;text-align:center;max-width:120px}

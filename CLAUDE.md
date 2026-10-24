@@ -27,7 +27,7 @@ GitHub：https://github.com/jacklim-gif/zero-to-game
 | 章 | 内容 | 小成品 | 状态 |
 | --- | --- | --- | --- |
 | 0 | Unity 入门 | 能用 WASD 走动、走出地板会掉下去的方块 | 已完成（13 步） |
-| 1 | 恐怖游戏 | 黑暗走廊、手电筒、脚步声、会追你的怪物 | 未开始 |
+| 1 | 恐怖游戏 | 黑暗 L 形走廊、手电筒、闪烁的灯、脚步声、会升起的门、追你的怪物 | 已完成（18 步，2026-10-24） |
 | 2 | 生存游戏 | 小岛、饥饿口渴、采集、合成斧头、昼夜、存档 | 未开始 |
 | 3 | 沙盒游戏 | 网格建造：放置、删除、选建材、半透明预览 | 未开始 |
 | 4 | 美化通用篇 | 调色盘、灯光三件套、挑 Asset、装饰品摆放、后期速查、性能 | 未开始 |
@@ -56,7 +56,10 @@ app/styles.css        全部样式
 app/i18n.js           界面文字（中文 / English）和 ZTG.t() / ZTG.L()，最先加载
 app/chapters/ch0.js   第 0 章内容：STEPS、完成页、代码讲解、找 Bug 挑战（BUGS）、章末小测验（QUIZ）、导出说明，文字都写成 {zh, en}
 app/vendor/three.js   Three.js r186（esbuild 打包的普通脚本，window.THREE），离线可用
-app/scripts.js        内置 C# 脚本模板：FirstPersonMove、EnemyChase、SurvivalStats、DayNightCycle、SaveLoad、ItemData、Inventory（PlayerMove 在 ch0.js）
+app/chapters/ch1.js   第 1 章内容（恐怖游戏）：setup（开场只有地板 + Audio 文件夹）、18 个 STEPS、墙的蓝图框、BUGS、QUIZ、导出说明
+app/scripts.js        内置 C# 脚本模板：FirstPersonMove（3 个空）、EnemyChase、SurvivalStats、DayNightCycle、SaveLoad、ItemData、Inventory、
+                      LightFlicker、Footsteps、DoorOpen（2 个空）、CatchPlayer、ExitZone（PlayerMove 在 ch0.js）
+app/audio.js          声音：Footstep、Drone、Growl 都用代码合成（Web Audio），不用下载；ZTG.audio.play() 返回可改音量 / 左右的句柄
 app/props.js          素材库：10 个用基本形状拼出来的低多边形装饰品（树、石头、木箱……），不用下载，CC0
 app/editor.js         编辑器核心：状态、Three.js 渲染、交互、物理、脚本执行、NavMesh、UI、美化工具、教练提示层，最后加载
 main.js               Electron 入口：无菜单栏，sandbox + contextIsolation，外链用系统浏览器打开；IPC：版本号、字体缩放、检查更新
@@ -68,7 +71,7 @@ scripts/smoke.js      冒烟测试：打开 app，截主页和编辑器两张图
 
 ### 关键部分
 
-脚本按 `i18n.js` → `vendor/three.js` → `scripts.js` → `props.js` → `chapters/ch0.js` → `editor.js` 的顺序加载（普通 `<script>`，不用 ES module：`file://` 下 module 容易被 CORS 挡）。它们通过全局命名空间 `window.ZTG` 互相访问：`editor.js` 把 `S`（getter）、`mkObj`、`select`、`P`、`FL` 等挂到 `ZTG` 上，章节文件里的函数用 `G.xxx` 在调用时读取。
+脚本按 `i18n.js` → `vendor/three.js` → `scripts.js` → `props.js` → `audio.js` → `chapters/ch0.js` → `chapters/ch1.js` → `editor.js` 的顺序加载（普通 `<script>`，不用 ES module：`file://` 下 module 容易被 CORS 挡）。它们通过全局命名空间 `window.ZTG` 互相访问：`editor.js` 把 `S`（getter）、`mkObj`、`select`、`P`、`FL` 等挂到 `ZTG` 上，章节文件里的函数用 `G.xxx` 在调用时读取。
 
 - **语言**：`ZTG.t(key, ...参数)` 取界面文字；`ZTG.L({zh, en})` 取章节文字。找不到 key 会 `console.error`，冒烟测试会因此失败。Console 日志存的是 key + 参数，切换语言后旧日志也会跟着变。切换语言时，没改过名字的默认物体（主摄像机 ↔ Main Camera 等）一起改名。
 - **状态 `S`**：`objs`（场景物体）、`assets`（Project 文件）、`prefabs`、`sel`（当前选中）、`tool`（q/w/e/r）、`tab`（scene/game）、`step`（教练步骤）、`playing`、`flags`（教练用的进度标记）。`init()` 建初始场景。
@@ -80,9 +83,17 @@ scripts/smoke.js      冒烟测试：打开 app，截主页和编辑器两张图
 - **NavMesh**：`bakeNav` 在没有旋转的 Plane 上切 0.5 米格子，挡住的格子（静态碰撞体 + 0.5 米半径）不能走；`findPath` 是 8 方向 A*。
 - **脚本模板**：文件名决定模板（`LIB()` = ch0 的 PlayerMove + `scripts.js`）。`kind` 决定怎么模拟：`translate`（PlayerMove）、`fps`（FirstPersonMove：鼠标转头 + 角色控制器走路，Game 视图里点一下锁定鼠标，拖动也行）、`chase`（EnemyChase：每 0.25 秒重新找路追 target）。缺组件、没指定 target、没烘焙 NavMesh 时，报和真 Unity 一样的 NullReferenceException / UnassignedReferenceException / SetDestination 错误（每次 Play 每种只报一次），点错误跳到那一行。第一人称时从摄像机正前方做 Physics.Raycast，显示打中什么。
 - **UI**：Screen Space – Overlay，用 HTML 层 `#uilayer` 画（参考分辨率 1920×1080，按宽度缩放）。UI 物体有 Rect Transform（`ui.anchor` 九宫格锚点、`pos`、`size`）。建第一个 UI 物体时自动建 Canvas 和 EventSystem。
-- **生存系统脚本**：`survival`（SurvivalStats：饥饿/口渴随时间下降，驱动 UI Slider）、`daynight`（DayNightCycle：旋转方向光，天空和环境光跟着变，`setSky`）、`saveload`（SaveLoad：F5 存 F9 读，模拟 PlayerPrefs，存在 `ztg.prefs`，Window → PlayerPrefs 查看，Edit 菜单可清空）、`inventory`（Inventory：引用 itemdata 列表，按 1/2/3 拾取并显示在 UI Text）。字段类型：`float`、`transform`、`ref`（只接受某种 UI 物体）、`assetlist`。
+- **生存系统脚本**：`survival`（SurvivalStats：饥饿/口渴随时间下降，驱动 UI Slider）、`daynight`（DayNightCycle：旋转方向光，天空和环境光跟着变，`setSky`）、`saveload`（SaveLoad：K 存 L 读，模拟 PlayerPrefs，存在 `ztg.prefs`，Window → PlayerPrefs 查看，Edit 菜单可清空）、`inventory`（Inventory：引用 itemdata 列表，按 1/2/3 拾取并显示在 UI Text）。字段类型：`float`、`transform`、`ref`（只接受某种 UI 物体）、`assetlist`。
 - **美化工具**：前后对比滑块（`#cmpx`，左边灰盒、右边真材质，用 scissor 画两遍）；调色盘（`paletteOf`：相近色 / 互补 / 三色 / 单色，一键生成材质）；素材库（Window → Asset Library，`propThumb` 离屏渲染缩略图）；摆放检查（`layoutCheck`：同角度、排成一线、大小差不多、空角落，用黄色标记）；截图对比（`ztg.snaps`，最多几张并排看）。浮动小窗口用 `openFloat` / `closeFloat`。
-- **模式**：`MODE` = `ch0`（教学）、`free`（自由模式，没有教练步骤）、`bugs`（找 Bug 挑战，第 0 章完成后解锁）。每种模式各存一份进度：`ztg.ch0.save`、`ztg.free.save`、`ztg.bugs.save`。
+- **模式**：`MODE` = `ch0` / `ch1`（教学）、`free`（自由模式，没有教练步骤）、`bugs` / `bugs1`（第 0 / 1 章的找 Bug 挑战，完成那一章后解锁）。每种模式各存一份进度：`ztg.<mode>.save`；完成标记 `ztg.ch<n>.done`，小测验最好成绩 `ztg.ch<n>.quiz`。`chapNum()`、`isLesson()`、`isBugs()` 判断模式；`setChap()` 切换 `CHAP` / `STEPS`。章节可以有 `setup()`（初始场景），新开或重新开始时在 `init()` 之后调用。
+- **灯光**：灯光物体有 `o.light = {kind: directional|point|spot, color, intensity, range, angle}`。第一个方向光当太阳；点光源 / 聚光灯各对应一个 Three.js 灯（`syncLights`，聚光灯有阴影）。层级 + → 灯光 → 方向光 / 点光源 / 聚光灯。所有材质 `shadowSide = FrontSide`（和 Unity 一样只用朝向灯的那一面投影），所以在玩家胶囊里的手电筒照得出去。
+- **灯光窗口**（Window → Rendering → Lighting，`openLighting`）：`S.env = {skybox, src: skybox|color, amb, mul, fog, fogColor, fogMode: linear|exp|exp2, density, start, end}`，存在场景快照、撤销和存档里。场景视图右上角「灯光」按钮（`sceneLit`）关掉后用明亮的固定灯光编辑，不影响游戏画面。
+- **后期处理**：层级 + → 体积 → 全局体积（空物体 + `o.vol = {profile, ov}`）。配置文件点「新建」后才能「添加覆盖」：Bloom、Color Adjustments、Film Grain、Vignette。只有摄像机勾选了 Post Processing（`o.cam.post`，默认不勾，和 URP 新场景一样）才生效。实现：EffectComposer → RenderPass → UnrealBloomPass → OutputPass → 自己写的 ShaderPass（`GRADE`：曝光、对比度、饱和度、暗角、颗粒）。
+- **声音**：资源类型 `audio`（`clip` 是 audio.js 里的 key）。组件 `o.audio = {clip, volume, loop, awake, blend, minDist, maxDist}`（添加组件 → 音频 → 音频源；把音频拖到物体上会自动加一个）。播放时 `playSource` / `updateSounds`：3D 声音按离摄像机（音频监听器）的距离用对数衰减（minDist / 距离），并按左右分声道。游戏画面左下角列出正在响的声音（听不到也看得到）。设置里可以关掉声音（`ztg.settings.sound`）。
+- **触发器脚本**：`triggers()` 发现有东西进来时调用 `trigEnter`：DoorOpen 只认名字完全是 `OnTriggerEnter` 的方法（拼错不报错，只出一条 [模拟器提示]），标签不存在时报 `Tag: X is not defined.`；ExitZone 判断 Player 标签。`Time.timeScale = 0` 用 `S.frozen` 模拟（停止播放就恢复）。
+- **网格吸附**：W 工具拖箭头时按住 Ctrl / Cmd，每次移动 1 米；E 工具按住时每次 15 度。
+- **蓝图框**：章节步骤可以有 `ghosts()`，返回 `[{min, max, done, label}]`，场景视图画成蓝色虚线框（放好了变绿）。
+- **箭头提示**：目标在可滚动的面板里被挡住时会自动滚过去（层级很长时 Player 在最下面）。
 - **提示分级**：教学模式下每步先只发亮（0 级），点「给我提示」显示提示文字（1 级），再点「指给我看」才出箭头和「帮我做这一步」（2 级）；同一步卡 25 秒自动升一级。设置里可改成「一直显示箭头」（`ztg.settings.hints = 'always'`）。
 - **学习**：章末小测验（6 题，最好成绩存在 `ztg.ch0.quiz`）；导出到真 Unity（`exportUnity()` 自己写 zip，内含用户的 .cs 脚本 + 「在真 Unity 里怎么做」清单）。
 - **设置**：齿轮按钮（语言、字体大小 90–130%、提示方式、检查更新、关于），「?」键或按钮打开快捷键说明。设置存在 `ztg.settings`。字体缩放在桌面 app 里走 `ztgApp.setZoom`（`setZoomFactor`），没有 preload 时退回 CSS zoom。
@@ -137,10 +148,12 @@ xvfb-run -a -s "-screen 0 1600x1000x24" npx electron --no-sandbox --disable-gpu 
 ## 已知限制
 
 - 触屏上的拖放不太顺。
-- 只有第 0 章（另有自由模式和找 Bug 挑战）。
+- 只有第 0、1 章（另有自由模式和两个找 Bug 挑战）。
 - 素材库是程序生成的简单模型，不是 Kenney 的真素材（下载外部素材要先问发起人）。
 - 更新只会提示，不会自动下载安装。
-- 编辑器里还只有方向光，没有点光源 / 聚光灯组件、雾、后期处理（Three.js 都做得到，demo 里已有，等写第 1 章时接进编辑器）。
+- 门升起来后 NavMesh 不会更新（真 Unity 要用 NavMesh Obstacle 的 Carve），所以第 1 章的门放在出口。
+- 声音是合成的简单音效；3D 声音只有对数衰减和左右声道，没有混响。
+- 后期处理只在游戏视图里显示。
 - 物理是简化版：碰撞体用包围盒，物体之间不会互相推，刚体不会翻倒。
 
 ## 建议的下一步（按顺序）
@@ -151,8 +164,9 @@ xvfb-run -a -s "-screen 0 1600x1000x24" npx electron --no-sandbox --disable-gpu 
 4. ~~为第 1 章升级渲染器~~（已完成）：评估改用 Three.js（打包进项目，不走 CDN），需要能演示：点光源/聚光灯（手电筒）、雾、阴影、后期处理（Vignette、Film Grain、Color Adjustments）。先做一个最小的技术验证，和发起人确认效果后再写第 1 章。
    - 技术验证已做（2026-10-24）：`npm run demo` 打开 `prototypes/renderer-demo.html`，恐怖走廊 + 手电筒 + 闪烁灯泡 + 雾 + 阴影 + 金属/发光/贴图材质 + 后期处理 + 前后对比滑块，60 FPS。发起人已确认效果，编辑器已换成 Three.js（2026-10-24）。
    - Three.js r186 用 esbuild 打包成普通脚本 `app/vendor/three.js`（`window.THREE`，含 EffectComposer、RenderPass、UnrealBloomPass、ShaderPass、OutputPass）。入口 `scripts/three-entry.js`，改了跑 `npm run vendor`，打包结果要提交。r186 已没有 `PCFSoftShadowMap`，用 `PCFShadowMap`。
-5. **写第 1 章：恐怖游戏**。先列出步骤大纲给发起人确认，再实现。美化环节要有「灰盒 → 加材质 → 加灯光 → 加后期」的前后对比。
-6. 发布到 GitHub，推 `v0.1.0` tag，确认 Actions 产出三个平台的安装包。
+5. ~~写第 1 章：恐怖游戏~~（已完成 2026-10-24，18 步，发起人确认过大纲：开场只有地板、声音用代码合成）。
+6. **写第 2 章：生存游戏**。编辑器已经有 UI、饥饿条、昼夜、存档、物品数据。先列出步骤大纲给发起人确认。
+7. 发布到 GitHub，推 `v0.1.0` tag，确认 Actions 产出三个平台的安装包。
 
 做任何会改变课程内容或方向的决定（章节顺序、步骤内容、换渲染技术）之前，先问发起人。
 
@@ -165,10 +179,10 @@ xvfb-run -a -s "-screen 0 1600x1000x24" npx electron --no-sandbox --disable-gpu 
 2. Collider（Box、Sphere、Capsule），Scene 里显示绿色线框；没有 Collider 会穿墙（1、2、3）— 已完成
 3. Rigidbody（重力、质量、Is Kinematic），教「有 Collider 但没 Rigidbody」的差别（3）— 第 0 章已有基础版
 4. Character Controller：第一人称移动的标准做法（1）— 已完成（配合 FirstPersonMove 脚本）
-5. Is Trigger + 触发事件：开门、捡东西、进入区域触发怪物（1、2）— 部分完成：触发检测和控制台提示有了，OnTriggerEnter 脚本模板等第 1 章
-6. Audio Source / Audio Listener：脚步声、环境音（1）
-7. Light 组件（Point、Spot，颜色、强度、范围）⚠ 手电筒就是 Spot Light（1、4）
-8. 简单动画：门打开、灯闪烁，不用完整 Animator（1）
+5. Is Trigger + 触发事件：开门、捡东西、进入区域触发怪物（1、2）— 已完成（DoorOpen、ExitZone）
+6. Audio Source / Audio Listener：脚步声、环境音（1）— 已完成（声音用代码合成）
+7. Light 组件（Point、Spot，颜色、强度、范围）手电筒就是 Spot Light（1、4）— 已完成
+8. 简单动画：门打开、灯闪烁，不用完整 Animator（1）— 用脚本做了（DoorOpen、LightFlicker）
 9. NavMesh 烘焙 + NavMesh Agent：怪物追人，重现「AI 不动」（1）— 已完成（NavMesh Surface + Agent + EnemyChase）
 10. Particle System：火、灰尘、放置特效（3、4）
 
@@ -177,11 +191,11 @@ xvfb-run -a -s "-screen 0 1600x1000x24" npx electron --no-sandbox --disable-gpu 
 12. 父子关系：在 Hierarchy 把物体拖到另一个物体下（摄像机挂玩家、手电筒挂摄像机）（1）— 已完成（拖到物体上变子物体，拖到空白处取消；保持世界位置）
 13. 复制（Ctrl+D）、复制粘贴（1、2）— 已完成
 14. 更多物体：Sphere、Capsule、Cylinder、Quad、Empty GameObject（全部）— 已完成
-15. 网格吸附（拖动时按住 Ctrl）（1、3）
+15. 网格吸附（拖动时按住 Ctrl）（1、3）— 已完成（移动 1 米、旋转 15 度）
 16. Tags 和 Layers：触发器判断「碰到的是不是 Player」（1、2）— 已完成（检查器下拉选单；Layer 还没有实际作用）
 17. 多选（Shift / Cmd 点选）（全部）— 已完成（层级里）
 18. Prefab 覆盖（Overrides：Apply / Revert）（1、3）
-19. Scene 里的辅助显示：灯光范围、Collider 线框、声音范围（1）— Collider 线框、导航路径、射线已有
+19. Scene 里的辅助显示：灯光范围、Collider 线框、声音范围（1）— 已完成（灯光范围 / 光锥、声音范围、Collider 线框、导航路径、射线）
 
 **C. 写代码**
 20. 填空式代码编辑：模板留几个空让用户自己打（全部）— 第 0 章已有（4 个空）
@@ -191,9 +205,9 @@ xvfb-run -a -s "-screen 0 1600x1000x24" npx electron --no-sandbox --disable-gpu 
 24. 执行顺序可视化：Play 时 Start、Update、OnTriggerEnter 被调用的那一刻代码亮一下（全部）— 已完成（Start、Update、按键行；OnTriggerEnter 等第 1 章）
 
 **D. 美化（发起人说最难的部分）**
-25. Lighting 窗口：天空盒、环境光颜色、雾 ⚠（1、2、4）
-26. Post-processing Volume：Vignette、Film Grain、Bloom、Color Adjustments ⚠（1、4）
-27. 阴影 ⚠（1、4）
+25. Lighting 窗口：天空盒、环境光颜色、雾（1、2、4）— 已完成
+26. Post-processing Volume：Vignette、Film Grain、Bloom、Color Adjustments（1、4）— 已完成
+27. 阴影（1、4）— 已完成（方向光、聚光灯）
 28. 完整材质属性：Metallic、Smoothness、Emission（发光）、贴图（2、4）
 29. 前后对比滑块：一边灰盒，一边美化后（每章）— 已完成
 30. 调色盘工具：选一个主色，自动推荐 3 到 5 个搭配色（4）— 已完成
