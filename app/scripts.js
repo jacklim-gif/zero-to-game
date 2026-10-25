@@ -573,6 +573,105 @@ const Jumpscare = {
     { c: ['}'] }],
 };
 
+// ---------- 菜单课：主菜单、暂停菜单 ----------
+// methods：public 方法，会出现在按钮 On Click 的下拉菜单里
+const MainMenu = {
+  name: 'MainMenu', kind: 'menu', methods: ['StartGame', 'QuitGame'], fields: [],
+  blanks: [
+    { id: 'ns', w: 26, tip: { zh: '切换场景的工具在 UnityEngine.SceneManagement 里', en: 'Scene loading lives in UnityEngine.SceneManagement' } },
+    { id: 'scene', w: 11, tip: { zh: '要打开的场景名字：SampleScene（和项目里的名字一模一样）', en: 'The scene to open: SampleScene (exactly as it is named in the Project)' } }],
+  answers: { ns: 'UnityEngine.SceneManagement', scene: 'SampleScene' },
+  compile(b) {
+    const E = [], rt = { scene: '' };
+    const ns = val(b, 'ns'), L = MainMenu.lines, ln = re => L.findIndex(l => l.c.some(x => typeof x === 'string' && re.test(x)));
+    if (!ns) E.push({ b: 'ns', code: 'CS1001', en: 'Identifier expected', zh: 'using 后面空着，要填 UnityEngine.SceneManagement。' });
+    else if (ns !== 'UnityEngine.SceneManagement') {
+      E.push({ b: 'ns', code: 'CS0246', en: `The type or namespace name '${ns.split('.').pop()}' could not be found (are you missing a using directive or an assembly reference?)`, zh: `找不到「${ns}」。要写 UnityEngine.SceneManagement（注意大小写和点）。` });
+      E.push({ line: ln(/SceneManager\.LoadScene/), code: 'CS0103', en: "The name 'SceneManager' does not exist in the current context", zh: '因为上面的 using 写错了，电脑不认识 SceneManager。' });
+    }
+    const sc = String(b.scene == null ? '' : b.scene);
+    if (sc.includes('"')) E.push({ b: 'scene', code: 'CS1010', en: 'Newline in constant', zh: '双引号 " 会提前结束这段文字。里面只写场景名字。' });
+    else rt.scene = sc;
+    return { errors: E, rt };
+  },
+  lines: [
+    { c: ['using UnityEngine;'] },
+    { c: ['using ', B('ns'), ';'], x: { zh: '引入切换场景用的 SceneManager。', en: 'Brings in SceneManager, used to switch scenes.' } },
+    { c: [''] },
+    { c: ['public class MainMenu : MonoBehaviour'], x: { zh: '主菜单的按钮会调用这里的方法。挂在一个空物体（MenuManager）上。', en: 'The main menu buttons call the methods here. Put it on an empty object (MenuManager).' } },
+    { c: ['{'] },
+    { c: ['    public void StartGame()'], run: 'trigger', x: { zh: 'public：按钮的 On Click 才看得到它。点「开始」时调用。', en: 'public, so a button’s On Click can see it. Called when you click Start.' } },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        SceneManager.LoadScene("', B('scene'), '");'], run: 'trigger', x: { zh: '关掉现在的场景，打开另一个。那个场景必须在 Scene List（File → Build Profiles）里。', en: 'Closes this scene and opens another. That scene must be in the Scene List (File → Build Profiles).' } },
+    { c: ['    }'], run: 'trigger' },
+    { c: [''] },
+    { c: ['    public void QuitGame()'], run: 'trigger', x: { zh: '点「退出」时调用。', en: 'Called when you click Quit.' } },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        Debug.Log("Quit");'], run: 'trigger', x: { zh: '在编辑器里看不出有没有退出，所以先打印一句话确认按钮有用。', en: 'In the editor you can’t tell whether it quit, so print a line to confirm the button works.' } },
+    { c: ['        Application.Quit();'], run: 'trigger', x: { zh: '关掉游戏。在编辑器里不会有反应，只有打包出来的游戏才会关掉。', en: 'Quits the game. It does nothing in the editor — only in a built game.' } },
+    { c: ['    }'], run: 'trigger' },
+    { c: ['}'] }],
+};
+
+const PauseMenu = {
+  name: 'PauseMenu', kind: 'pause', methods: ['Resume', 'BackToMenu'],
+  fields: [{ id: 'pausePanel', label: 'Pause Panel', type: 'transform', go: true, def: null }],
+  blanks: [
+    { id: 'esc', w: 9, tip: { zh: '要按的键：escapeKey（Esc 键）', en: 'The key to press: escapeKey (the Esc key)' } },
+    { id: 'zero', w: 3, tip: { zh: '暂停时游戏时间的速度：0f', en: 'Game speed while paused: 0f' } }],
+  answers: { esc: 'escapeKey', zero: '0f' },
+  compile(b) {
+    const E = [], rt = { key: 'Escape', zero: 0 };
+    const k = val(b, 'esc'), m = /^([a-z]+)Key$/.exec(k);
+    if (!k) E.push({ b: 'esc', code: 'CS1001', en: 'Identifier expected', zh: '点号后面空着，要填 escapeKey。' });
+    else if (!m) E.push({ b: 'esc', code: 'CS1061', en: `'Keyboard' does not contain a definition for '${k}' and no accessible extension method '${k}' accepting a first argument of type 'Keyboard' could be found (are you missing a using directive or an assembly reference?)`, zh: `键盘没有「${k}」。Esc 键要写 escapeKey（e 小写，K 大写）。` });
+    else rt.key = m[1].length === 1 ? 'Key' + m[1].toUpperCase() : m[1][0].toUpperCase() + m[1].slice(1);
+    floatBlank(E, b, 'zero', rt);
+    return { errors: E, rt };
+  },
+  lines: [
+    { c: ['using UnityEngine;'] },
+    { c: ['using UnityEngine.InputSystem;'] },
+    { c: ['using UnityEngine.SceneManagement;'] },
+    { c: [''] },
+    { c: ['public class PauseMenu : MonoBehaviour'], x: { zh: '按 Esc 暂停 / 继续。要挂在一直开着的物体上（PauseManager），不要挂在会被关掉的面板上。', en: 'Esc pauses and resumes. Put it on an object that stays on (PauseManager), not on the panel that gets switched off.' } },
+    { c: ['{'] },
+    { c: ['    public GameObject pausePanel;'], err: 'noPanel', x: { zh: '暂停时显示的面板。', en: 'The panel shown while paused.' } },
+    { c: ['    bool paused;'] },
+    { c: [''] },
+    { c: ['    void Update()'], run: 'update' },
+    { c: ['    {'], run: 'update' },
+    { c: ['        if (Keyboard.current.', B('esc'), '.wasPressedThisFrame)'], run: 'update', key: 'Escape', x: { zh: '在编辑器里按 Esc 也会放开鼠标，这是正常的。', en: 'In the editor, Esc also frees the mouse — that’s normal.' } },
+    { c: ['        {'], run: 'update' },
+    { c: ['            if (paused) Resume();'], run: 'update' },
+    { c: ['            else Pause();'], run: 'update' },
+    { c: ['        }'], run: 'update' },
+    { c: ['    }'], run: 'update' },
+    { c: [''] },
+    { c: ['    void Pause()'], run: 'trigger', x: { zh: '没写 public，所以按钮的 On Click 里看不到它。', en: 'Not public, so a button’s On Click can’t see it.' } },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        pausePanel.SetActive(true);'], run: 'trigger', err: 'noPanel' },
+    { c: ['        Time.timeScale = ', B('zero'), ';'], run: 'trigger', x: { zh: 'Time.timeScale 是游戏时间的速度。0 = 全部停住，1 = 正常。', en: 'Time.timeScale is the speed of game time. 0 freezes everything, 1 is normal.' } },
+    { c: ['        Cursor.lockState = CursorLockMode.None;'], run: 'trigger', x: { zh: '放开鼠标，才能点菜单上的按钮。', en: 'Frees the mouse so you can click the menu buttons.' } },
+    { c: ['        paused = true;'], run: 'trigger' },
+    { c: ['    }'], run: 'trigger' },
+    { c: [''] },
+    { c: ['    public void Resume()'], run: 'trigger', x: { zh: '「继续」按钮调用它。', en: 'The Resume button calls this.' } },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        pausePanel.SetActive(false);'], run: 'trigger' },
+    { c: ['        Time.timeScale = 1f;'], run: 'trigger' },
+    { c: ['        Cursor.lockState = CursorLockMode.Locked;'], run: 'trigger' },
+    { c: ['        paused = false;'], run: 'trigger' },
+    { c: ['    }'], run: 'trigger' },
+    { c: [''] },
+    { c: ['    public void BackToMenu()'], run: 'trigger', x: { zh: '「主菜单」按钮调用它。', en: 'The Main Menu button calls this.' } },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        Time.timeScale = 1f;'], run: 'trigger', x: { zh: '一定要先改回 1：Time.timeScale 换场景也不会自己恢复，不然下次开始游戏会一直停住。', en: 'Set it back to 1 first: Time.timeScale does not reset when the scene changes, or the next game would stay frozen.' } },
+    { c: ['        SceneManager.LoadScene("MainMenu");'], run: 'trigger' },
+    { c: ['    }'], run: 'trigger' },
+    { c: ['}'] }],
+};
+
 ZTG.scriptLib = { FirstPersonMove, EnemyChase, SurvivalStats, DayNightCycle, SaveLoad, ItemData, Inventory, LightFlicker, Footsteps, DoorOpen, CatchPlayer, ExitZone,
-  Interactable, Interact, FlashlightPickup, KeyPickup, LockedDoor, Jumpscare };
+  Interactable, Interact, FlashlightPickup, KeyPickup, LockedDoor, Jumpscare, MainMenu, PauseMenu };
 })();

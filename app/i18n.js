@@ -233,6 +233,18 @@ zh: {
   p_float:'Float（小数）', p_int:'Int（整数）', p_bool:'Bool（是 / 否）', p_trigger:'Trigger（触发器）',
   lNoParam:n=>`Parameter '${n}' does not exist. Animator 里没有叫「${n}」的参数（大小写要一样）。`, lAnimCreated:(c,k)=>`建好了动画剪辑 ${c} 和动画控制器 ${k}，物体加上了 Animator 组件`,
   whyNoAnim:'这个物体上没有 Animator 组件。先用动画窗口给它建一个动画。',
+
+  // 菜单课：场景、Scene List、按钮
+  chmenuDesc:n=>`做一个主菜单（开始 / 退出）和按 Esc 的暂停菜单，学会切换场景。${n} 步，约 40 分钟。接着第 1 章下篇的走廊做。`,
+  bugsCardMenu:'菜单坏掉了，把 4 个问题找出来修好。',
+  stopBeforeScene:'先停止播放，再打开别的场景', sceneModT:'场景有改动', sceneModQ:n=>`要保存对场景 ${n} 的改动吗？不保存的话，这些改动会丢掉。`, sdSave:'保存', sdNoSave:'不保存', sdCancel:'取消',
+  lSceneOpened:n=>`打开了场景 ${n}`, sceneM:'场景', buildM:'Build Profiles（场景列表）', buildT:'Build Profiles', sceneListT:'Scene List（场景列表）', moveUp:'上移',
+  sceneListEmpty:'列表是空的。点「Add Open Scenes」加入现在打开的场景，或者把项目窗口里的场景拖进来。', addOpenScenes:'Add Open Scenes（加入打开的场景）',
+  sceneListNote:'只有列表里勾选的场景能用 SceneManager.LoadScene 打开。右边的数字是编号，0 号是打包后游戏一开始打开的场景。',
+  lSceneNotInList:n=>`Scene '${n}' couldn't be loaded because it has not been added to the build settings or the AssetBundle has not been loaded. 场景「${n}」打不开：它不在 Scene List（File → Build Profiles）里，或者名字写错了。`,
+  lSceneLoaded:n=>`SceneManager.LoadScene：打开了场景 ${n}`, lQuitIgnored:'[模拟器提示] Application.Quit 在编辑器里不会关掉游戏，只有打包出来的游戏才会关掉。',
+  uiPanel:'面板（Panel）', nPanel:'面板', a_stretch:'铺满（Stretch）', alphaL:'透明度（A，0 到 1）', alignL:'对齐', al_left:'靠左', al_center:'居中',
+  normalColor:'普通颜色（Normal Color）', hlColor:'鼠标移上去的颜色（Highlighted Color）', ocFunc:'要调用的方法', ocEmpty:'列表是空的。点 + 加一项。', ocAdd:'添加一项',
 },
 en: {
   appTitle:'Zero to Game',
@@ -456,6 +468,18 @@ en: {
   p_float:'Float', p_int:'Int', p_bool:'Bool', p_trigger:'Trigger',
   lNoParam:n=>`Parameter '${n}' does not exist.`, lAnimCreated:(c,k)=>`Created Animation Clip ${c} and Animator Controller ${k}, and added an Animator component`,
   whyNoAnim:'',
+
+  // Menu lesson: scenes, Scene List, buttons
+  chmenuDesc:n=>`Build a main menu (Start / Quit) and an Esc pause menu, and learn to switch scenes. ${n} steps, about 40 minutes. Continues the Chapter 1 part 2 corridor.`,
+  bugsCardMenu:'The menus are broken. Find and fix all 4 problems.',
+  stopBeforeScene:'Stop Play before opening another scene', sceneModT:'Scene(s) Have Been Modified', sceneModQ:n=>`Do you want to save the changes you made in the scene ${n}? Your changes will be lost if you don’t save them.`, sdSave:'Save', sdNoSave:'Don’t Save', sdCancel:'Cancel',
+  lSceneOpened:n=>`Opened scene ${n}`, sceneM:'Scene', buildM:'Build Profiles', buildT:'Build Profiles', sceneListT:'Scene List', moveUp:'Move up',
+  sceneListEmpty:'The list is empty. Click Add Open Scenes to add the open scene, or drag scenes in from the Project window.', addOpenScenes:'Add Open Scenes',
+  sceneListNote:'Only checked scenes in this list can be opened with SceneManager.LoadScene. The number on the right is the index; scene 0 is the one a built game opens first.',
+  lSceneNotInList:n=>`Scene '${n}' couldn't be loaded because it has not been added to the build settings or the AssetBundle has not been loaded.`,
+  lSceneLoaded:n=>`SceneManager.LoadScene: opened scene ${n}`, lQuitIgnored:'[Simulator] Application.Quit does nothing in the editor; it only quits a built game.',
+  uiPanel:'Panel', nPanel:'Panel', a_stretch:'Stretch', alphaL:'Alpha (A, 0 to 1)', alignL:'Alignment', al_left:'Left', al_center:'Center',
+  normalColor:'Normal Color', hlColor:'Highlighted Color', ocFunc:'Function to call', ocEmpty:'The list is empty. Click + to add an entry.', ocAdd:'Add entry',
 },
 };
 
@@ -514,6 +538,10 @@ const TERMS = {
   coroutine:{zh:['协程'],en:['coroutine'],t:{zh:'可以「暂停一下，下一帧或几秒后再继续」的方法。用来做有先后顺序、需要时间的事。',en:'A method that can pause and continue next frame or seconds later. Used for things that happen over time.'}},
   setActive:{zh:['SetActive'],en:['SetActive'],t:{zh:'整个物体的开关（检查器里名字旁边的勾）。关掉就看不见、不碰撞、脚本也不跑。',en:'The on/off switch for a whole object (the checkbox by its name). Off means invisible, no collisions, no scripts.'}},
   pivot:{zh:['轴心','门轴'],en:['pivot','hinge'],t:{zh:'物体旋转时绕着转的那个点。立方体绕中心转；想绕边转，就放进一个空物体里，转空物体。',en:'The point an object turns around. A cube turns around its center; to turn around an edge, put it inside an empty object and turn that.'}},
+  sceneList:{zh:['Scene List','场景列表'],en:['Scene List'],t:{zh:'File → Build Profiles 里的场景清单。只有在清单里的场景，才能用代码打开；0 号是游戏一开始打开的场景。',en:'The list of scenes under File → Build Profiles. Only scenes in it can be opened from code; scene 0 opens first in a built game.'}},
+  timeScale:{zh:['Time.timeScale'],en:['Time.timeScale'],t:{zh:'游戏时间的速度。0 = 停住（暂停），1 = 正常。换场景也不会自己变回 1。',en:'The speed of game time. 0 freezes it (pause), 1 is normal. It does not reset when the scene changes.'}},
+  onClick:{zh:['On Click'],en:['On Click'],t:{zh:'按钮被点一下时要做的事：拖一个物体进去，再选它脚本上的一个 public 方法。',en:'What a button does when clicked: drag an object in, then choose a public method from its scripts.'}},
+  eventSystem:{zh:['事件系统','EventSystem'],en:['EventSystem','Event System'],t:{zh:'让 UI 能被点击的物体。建第一个 UI 时 Unity 会自动建一个；删掉了，按钮就点不动。',en:'The object that lets UI be clicked. Unity adds one with your first UI element; delete it and buttons stop responding.'}},
   nullRef:{zh:['NullReferenceException'],en:['NullReferenceException'],t:{zh:'最常见的报错：代码想用一个东西，但它是空的（null）。通常是组件没加，或者检查器里的格子没拖东西进去。',en:"The most common error: the code tries to use something that is empty (null). Usually a component is missing or an Inspector slot is empty."}},
 };
 G.terms = TERMS;

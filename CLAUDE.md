@@ -29,7 +29,7 @@ GitHub：https://github.com/jacklim-gif/zero-to-game
 | 0 | Unity 入门 | 能用 WASD 走动、走出地板会掉下去的方块 | 已完成（13 步） |
 | 1 | 恐怖游戏 | 黑暗 L 形走廊、手电筒、闪烁的灯、脚步声、会升起的门、追你的怪物 | 已完成（18 步，2026-10-24） |
 | 1 下篇 | 恐怖游戏进阶 | 按 F 捡手电筒和钥匙、锁着的门 + 录制的开门动画（Animator）、Jumpscare（协程） | 已完成（14 步，2026-10-25） |
-| 菜单课 | 主菜单 + 暂停菜单 | 多个场景、Scene List、按钮 On Click、Esc 暂停 | 发起人已确认要做（下一个） |
+| 菜单课（加餐课） | 主菜单 + 暂停菜单 | 新建 / 打开场景、Scene List、按钮 On Click、Esc 暂停（Time.timeScale） | 已完成（13 步，2026-10-25） |
 | 2 | 生存游戏 | 小岛、饥饿口渴、采集、合成斧头、昼夜、存档 | 未开始 |
 | 3 | 沙盒游戏 | 网格建造：放置、删除、选建材、半透明预览 | 未开始 |
 | 4 | 美化通用篇 | 调色盘、灯光三件套、挑 Asset、装饰品摆放、后期速查、性能 | 未开始 |
@@ -61,7 +61,9 @@ app/vendor/three.js   Three.js r186（esbuild 打包的普通脚本，window.THR
 app/chapters/ch1.js   第 1 章内容（恐怖游戏）：setup（开场只有地板 + Audio 文件夹）、18 个 STEPS、墙的蓝图框、BUGS、QUIZ、导出说明
 app/scripts.js        内置 C# 脚本模板：FirstPersonMove（3 个空）、EnemyChase、SurvivalStats、DayNightCycle、SaveLoad、ItemData、Inventory、
                       LightFlicker、Footsteps、DoorOpen（2 个空）、CatchPlayer、ExitZone、
-                      Interactable、Interact（2 个空）、FlashlightPickup、KeyPickup、LockedDoor、Jumpscare（2 个空）（PlayerMove 在 ch0.js）
+                      Interactable、Interact（2 个空）、FlashlightPickup、KeyPickup、LockedDoor、Jumpscare（2 个空）、
+                      MainMenu（2 个空）、PauseMenu（2 个空）（PlayerMove 在 ch0.js）
+app/chapters/chmenu.js 菜单课：setup 用第 1 章下篇做完的走廊；13 个 STEPS（MainMenu 场景 + 暂停菜单）、BUGS、QUIZ、导出说明
 app/chapters/ch1b.js  第 1 章下篇：setup 用第 1 章每一步的 auto 搭好走廊（怪物先关掉），14 个 STEPS、BUGS、QUIZ、导出说明
 app/audio.js          声音：Footstep、Drone、Growl、Scream 都用代码合成（Web Audio），不用下载；ZTG.audio.play() 返回可改音量 / 左右的句柄
 app/props.js          素材库：10 个用基本形状拼出来的低多边形装饰品（树、石头、木箱……），不用下载，CC0
@@ -75,7 +77,7 @@ scripts/smoke.js      冒烟测试：打开 app，截主页和编辑器两张图
 
 ### 关键部分
 
-脚本按 `i18n.js` → `vendor/three.js` → `scripts.js` → `props.js` → `audio.js` → `chapters/ch0.js` → `chapters/ch1.js` → `chapters/ch1b.js` → `editor.js` 的顺序加载（普通 `<script>`，不用 ES module：`file://` 下 module 容易被 CORS 挡）。它们通过全局命名空间 `window.ZTG` 互相访问：`editor.js` 把 `S`（getter）、`mkObj`、`select`、`P`、`FL` 等挂到 `ZTG` 上，章节文件里的函数用 `G.xxx` 在调用时读取。
+脚本按 `i18n.js` → `vendor/three.js` → `scripts.js` → `props.js` → `audio.js` → `chapters/ch0.js` → `chapters/ch1.js` → `chapters/ch1b.js` → `chapters/chmenu.js` → `editor.js` 的顺序加载（普通 `<script>`，不用 ES module：`file://` 下 module 容易被 CORS 挡）。它们通过全局命名空间 `window.ZTG` 互相访问：`editor.js` 把 `S`（getter）、`mkObj`、`select`、`P`、`FL` 等挂到 `ZTG` 上，章节文件里的函数用 `G.xxx` 在调用时读取。
 
 - **语言**：`ZTG.t(key, ...参数)` 取界面文字；`ZTG.L({zh, en})` 取章节文字。找不到 key 会 `console.error`，冒烟测试会因此失败。Console 日志存的是 key + 参数，切换语言后旧日志也会跟着变。切换语言时，没改过名字的默认物体（主摄像机 ↔ Main Camera 等）一起改名。
 - **状态 `S`**：`objs`（场景物体）、`assets`（Project 文件）、`prefabs`、`sel`（当前选中）、`tool`（q/w/e/r）、`tab`（scene/game）、`step`（教练步骤）、`playing`、`flags`（教练用的进度标记）。`init()` 建初始场景。
@@ -89,11 +91,14 @@ scripts/smoke.js      冒烟测试：打开 app，截主页和编辑器两张图
 - **UI**：Screen Space – Overlay，用 HTML 层 `#uilayer` 画（参考分辨率 1920×1080，按宽度缩放）。UI 物体有 Rect Transform（`ui.anchor` 九宫格锚点、`pos`、`size`）。建第一个 UI 物体时自动建 Canvas 和 EventSystem。
 - **生存系统脚本**：`survival`（SurvivalStats：饥饿/口渴随时间下降，驱动 UI Slider）、`daynight`（DayNightCycle：旋转方向光，天空和环境光跟着变，`setSky`）、`saveload`（SaveLoad：K 存 L 读，模拟 PlayerPrefs，存在 `ztg.prefs`，Window → PlayerPrefs 查看，Edit 菜单可清空）、`inventory`（Inventory：引用 itemdata 列表，按 1/2/3 拾取并显示在 UI Text）。字段类型：`float`、`transform`、`ref`（只接受某种 UI 物体）、`assetlist`。
 - **美化工具**：前后对比滑块（`#cmpx`，左边灰盒、右边真材质，用 scissor 画两遍）；调色盘（`paletteOf`：相近色 / 互补 / 三色 / 单色，一键生成材质）；素材库（Window → Asset Library，`propThumb` 离屏渲染缩略图）；摆放检查（`layoutCheck`：同角度、排成一线、大小差不多、空角落，用黄色标记）；截图对比（`ztg.snaps`，最多几张并排看）。浮动小窗口用 `openFloat` / `closeFloat`。
-- **模式**：章节 key 是 `'0'`、`'1'`、`'1b'`（`CHAPS`）。`MODE` = `ch<key>`（教学）、`free`（自由模式，没有教练步骤）、`bugs`（第 0 章）/ `bugs<key>`（其他章）的找 Bug 挑战，完成那一章后解锁。每种模式各存一份进度：`ztg.<mode>.save`；完成标记 `ztg.ch<key>.done`，小测验最好成绩 `ztg.ch<key>.quiz`。`chapKey()`、`isLesson()`、`isBugs()` 判断模式；`setChap()` 切换 `CHAP` / `STEPS`；章节有 `label`（例如「第 1 章 · 下篇」）时用它代替「第 n 章」。章节可以有 `setup()`（初始场景），新开或重新开始时在 `init()` 之后调用。加新章：写 `chapters/chX.js`，在 `CHAPS` 里加 key，在 index.html 加两张卡片（`#chapX`、`#chapbugsX`）。
+- **模式**：章节 key 是 `'0'`、`'1'`、`'1b'`、`'menu'`（`CHAPS`）。`MODE` = `ch<key>`（教学）、`free`（自由模式，没有教练步骤）、`bugs`（第 0 章）/ `bugs<key>`（其他章）的找 Bug 挑战，完成那一章后解锁。每种模式各存一份进度：`ztg.<mode>.save`；完成标记 `ztg.ch<key>.done`，小测验最好成绩 `ztg.ch<key>.quiz`。`chapKey()`、`isLesson()`、`isBugs()` 判断模式；`setChap()` 切换 `CHAP` / `STEPS`；章节有 `label`（例如「第 1 章 · 下篇」）时用它代替「第 n 章」。章节可以有 `setup()`（初始场景），新开或重新开始时在 `init()` 之后调用。加新章：写 `chapters/chX.js`，在 `CHAPS` 里加 key，在 index.html 加两张卡片（`#chapX`、`#chapbugsX`）。
 - **启用 / 关闭**：物体的 `o.active`（名字旁边的勾，`isActive()` 会看所有父物体）：关掉的物体不画、不碰撞、脚本不跑、灯不亮、声音停，层级里变灰。灯光组件有自己的 `o.light.enabled`。
 - **互动**：Interact 脚本（挂在摄像机上）每帧从摄像机往前 `raycastW`，打中的物体或它的父物体上有 `interactable: true` 的脚本（继承 Interactable 的 FlashlightPickup、KeyPickup、LockedDoor），就把它的 `promptText` 写进 UI 文本；按对应键调用 `useInteractable`。`KeyPickup.hasKey` 这种 static 用 `simStatic` 模拟，每次播放重置。脚本模板可以有 `deps`：存一个脚本时，用到它的脚本会一起重新编译；缺少父类时报 CS0246。
 - **动画**：资源 `anim`（动画剪辑：`curves = {pos|rot|scl: [[秒, [x,y,z]], ...]}`、`loop`，即 Loop Time，新剪辑默认勾选）和 `animctrl`（动画控制器：`states[{id,name,clip,x,y}]`、`def`、`params[{name,type}]`、`trans[{from,to,exit,conds[]}]`）。物体组件 `o.anim = {ctrl}`。动画窗口（Window → Animation → Animation，`openAnimWin`，停靠在下方）：选中物体点「创建」→ 建剪辑 + 以物体命名的控制器 + Animator 组件；「录制」开着时，检查器 / 场景里改位置旋转缩放就在播放头时间记关键帧（第一次还会在 0 秒记下原来的值）；拖播放头会预览，关窗口还原。Animator 窗口（`openAnimator`）：右键空白处新建空状态，右键状态「建立过渡」/「设为默认状态」，点箭头改 Has Exit Time 和条件，左边加参数。播放时 `runAnimators`：先按条件（Trigger）走过渡，勾了 Has Exit Time 要等到 0.75 的位置；再按当前状态的剪辑设置物体（两个关键帧之间用平滑曲线）。`SetTrigger` 用了不存在的参数会报黄字 `Parameter 'X' does not exist.`
 - **Jumpscare**：协程用状态机模拟（`runJumpscare`）：鬼 SetActive(true)、播放尖叫、红灯打开、摄像机 localPosition 抖动，`showTime` 秒后全部还原。
+- **多个场景**：场景是项目里的 `scene` 资源。`S.cur` 是现在打开的场景；每个场景「存盘的版本」在 `S.scenes[id].saved`（JSON `[objs, env]`），保存场景时更新。项目窗口 创建 → 场景（`createScene`），双击打开（`openScene`：有没保存的改动时先问 保存 / 不保存 / 取消）。File → Build Profiles（`openBuild`）是 Scene List（`S.sceneList = [{id, on}]`，「Add Open Scenes」、从项目窗口拖场景进去、上移、勾选）。播放中 `SceneManager.LoadScene`（`loadSceneByName`）只能打开列表里勾选的场景，读的是存盘的版本；不在列表里报 `Scene 'X' couldn't be loaded ...`。停止播放回到原来打开的场景。Time.timeScale（`S.timeScale`）换场景不会重置。导出说明会把每个场景都列出来。
+- **按钮和 On Click**：UI 按钮有 `ui.onClick = [{obj, fn: '脚本名.方法名'}]` 和 `ui.hl`（Highlighted Color）。检查器的 On Click () 点 + 加一项，把物体拖进格子，下拉菜单只列出脚本模板的 `methods`（public 方法）。播放时点游戏画面里的按钮会调用 `callMethod`；场景里没有启用的事件系统（EventSystem）时按钮点不动、也不变色。还有 UI 面板（`uipanel`，铺满画布，有透明度 `alpha`），UI 文本有对齐（`align`）。放在面板里的 UI 也会画出来（只要祖先里有画布）。
+- **暂停**：Time.timeScale = 0 时只有 `kind: 'pause'` 的脚本还会跑（`runScripts(0, true)`），用来检测 Esc。播放中 Esc 会传给游戏（同时关闭菜单）。锁鼠标用 `lockMouse()`（浏览器拒绝时安静忽略）。
 - **浮动窗口**：`openFloat(id, 标题, html, bind, {bottom, wide})`。事件要绑在 `bind` 收到的窗口元素上（每次重画都是新元素），不要绑在 `#float` 上，否则事件会越积越多。动画窗口、Animator 窗口在 `commit()` 后自动重画（拖动状态时 `animBusy` 暂停重画）。
 - **灯光**：灯光物体有 `o.light = {kind: directional|point|spot, color, intensity, range, angle}`。第一个方向光当太阳；点光源 / 聚光灯各对应一个 Three.js 灯（`syncLights`，聚光灯有阴影）。层级 + → 灯光 → 方向光 / 点光源 / 聚光灯。所有材质 `shadowSide = FrontSide`（和 Unity 一样只用朝向灯的那一面投影），所以在玩家胶囊里的手电筒照得出去。
 - **灯光窗口**（Window → Rendering → Lighting，`openLighting`）：`S.env = {skybox, src: skybox|color, amb, mul, fog, fogColor, fogMode: linear|exp|exp2, density, start, end}`，存在场景快照、撤销和存档里。场景视图右上角「灯光」按钮（`sceneLit`）关掉后用明亮的固定灯光编辑，不影响游戏画面。
@@ -175,7 +180,7 @@ xvfb-run -a -s "-screen 0 1600x1000x24" npx electron --no-sandbox --disable-gpu 
    - Three.js r186 用 esbuild 打包成普通脚本 `app/vendor/three.js`（`window.THREE`，含 EffectComposer、RenderPass、UnrealBloomPass、ShaderPass、OutputPass）。入口 `scripts/three-entry.js`，改了跑 `npm run vendor`，打包结果要提交。r186 已没有 `PCFSoftShadowMap`，用 `PCFShadowMap`。
 5. ~~写第 1 章：恐怖游戏~~（已完成 2026-10-24，18 步，发起人确认过大纲：开场只有地板、声音用代码合成）。
 6. ~~第 1 章下篇~~（已完成 2026-10-25）：按 F 互动、钥匙和锁着的门、动画窗口 + Animator、Jumpscare。发起人确认：放在新的一章、用真的 Animation + Animator。
-7. **菜单课**（发起人已确认，下一个做）：主菜单场景（开始 / 退出按钮，SceneManager.LoadScene，File → Build Profiles → Scene List）+ 游戏里按 Esc 的暂停菜单（Time.timeScale）。编辑器要先支持多个场景和按钮的 On Click。
+7. ~~菜单课~~（已完成 2026-10-25）：主菜单场景（开始 / 退出按钮，SceneManager.LoadScene，File → Build Profiles → Scene List）+ 游戏里按 Esc 的暂停菜单（Time.timeScale）。
 8. **写第 2 章：生存游戏**。编辑器已经有 UI、饥饿条、昼夜、存档、物品数据。先列出步骤大纲给发起人确认。
 9. 发布到 GitHub，推 `v0.1.0` tag，确认 Actions 产出三个平台的安装包。
 

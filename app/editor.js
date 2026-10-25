@@ -29,7 +29,7 @@ let MODE='ch0';
 // 章节的 key：'0'、'1'、'1b'（第 1 章下篇）。模式名是 'ch' + key 或 'bugs' + key（第 0 章的找 Bug 是 'bugs'）
 const chapKey=m=>{const r=/^(?:ch|bugs)(\w+)$/.exec(m||MODE);return r?r[1]:'0';};
 const isLesson=()=>/^ch\w+$/.test(MODE),isBugs=()=>/^bugs\w*$/.test(MODE);
-const CHAPS=['0','1','1b'];
+const CHAPS=['0','1','1b','menu'];
 
 /* ---------- 3D math (Unity convention: left-handed, Y up, Z forward) ---------- */
 function rotV(v,e){let [x,y,z]=v;const [ax,ay,az]=e.map(d=>d*Math.PI/180);
@@ -61,9 +61,10 @@ const PROPS=()=>ZTG.props||{};
 const isModel=o=>o.type==='model';
 const isRender=o=>isMesh(o)||isModel(o);
 // UI：画在游戏画面上面（Screen Space - Overlay），用 1920×1080 的参考分辨率按画面宽度缩放
-const UI_TYPES=['canvas','uitext','uiimage','uislider','uibutton'];
+const UI_TYPES=['canvas','uitext','uiimage','uislider','uibutton','uipanel'];
 const isUI=o=>UI_TYPES.includes(o.type);
-const UI_DEF={uitext:{w:200,h:50,text:'New Text',size:36,color:'#ffffff'},uiimage:{w:100,h:100,color:'#ffffff'},
+// 面板（Panel）铺满画布，默认是半透明的白色（和 Unity 一样）
+const UI_DEF={uitext:{w:200,h:50,text:'New Text',size:36,color:'#ffffff',align:'left'},uiimage:{w:100,h:100,color:'#ffffff',alpha:1},uipanel:{w:1920,h:1080,color:'#ffffff',alpha:.39,stretch:true},
   uislider:{w:160,h:20,value:0,fill:'#f2f2f2',color:'#5a5f68'},uibutton:{w:160,h:30,text:'Button',color:'#ffffff',tcolor:'#323232',size:24}};
 const ANCH={tl:[0,1],tc:[.5,1],tr:[1,1],ml:[0,.5],mc:[.5,.5],mr:[1,.5],bl:[0,0],bc:[.5,0],br:[1,0]};
 const MESH_COL={cube:'box',sphere:'sphere',capsule:'capsule',cylinder:'capsule',plane:'mesh',quad:'mesh'};
@@ -94,7 +95,7 @@ function mkObj(type,name,pos,scale){const o={id:nid(),type,name,parent:null,pos:
 // 旧存档里没有的字段补上默认值
 function fixObj(o){if(o.col===undefined)o.col=MESH_COL[o.type]?{kind:MESH_COL[o.type],trigger:false,seq:0}:null;if(!o.tag)o.tag=o.type==='camera'?'MainCamera':'Untagged';if(!o.layer)o.layer='Default';
   for(const k of ['cc','agent','navs','rb','audio','vol','anim'])if(o[k]===undefined)o[k]=null;if(o.parent===undefined)o.parent=null;
-  if(o.type==='light'&&!o.light)o.light=mkLight('directional');if(o.type==='camera'&&!o.cam)o.cam={post:false};
+  if(o.type==='light'&&!o.light)o.light=mkLight('directional');if(o.type==='uibutton'&&o.ui){if(!o.ui.onClick)o.ui.onClick=[];if(!o.ui.hl)o.ui.hl='#f5f5f5';}if(o.type==='camera'&&!o.cam)o.cam={post:false};
   (o.scripts||[]).forEach(s=>{if(!s.vals)s.vals={speed:s.speed!=null?s.speed:5};});}
 function mkAsset(type,name,parent,extra){const a=Object.assign({id:nid(),type,name,parent:parent==null?S.cwd:parent},type==='script'?{blanks:{},comp:null}:{},extra||{});S.assets.push(a);return a;}
 const obj=id=>S.objs.find(o=>o.id===id), asset=id=>S.assets.find(a=>a.id===id);
@@ -104,9 +105,40 @@ const freshFlags=()=>({win:[],winMsg:'',moved:false,rotated:false,scaled:false,m
 function init(){
   S={objs:[],prefabs:{},assets:[],env:defEnv(),sel:null,multi:[],collapsed:[],tool:'w',tab:'scene',cwd:0,ptab:'project',step:0,playing:false,paused:false,snap:null,renaming:null,logs:[],savedJson:'',sig:'',dirty:false,flags:freshFlags()};
   mkObj('camera',t('nCamera'),[0,1,-10]);const l=mkObj('light',t('nLight'),[0,3,0]);l.rot=[50,-30,0];
-  const f=mkAsset('folder','Scenes',0);mkAsset('scene','SampleScene',f.id);
-  S.savedJson=snapJson();log('info','lReady');resetUndo();
+  const f=mkAsset('folder','Scenes',0);const sc=mkAsset('scene','SampleScene',f.id);S.cur=sc.id;S.scenes={};S.sceneList=[];S.timeScale=1;
+  S.savedJson=snapJson();S.scenes[S.cur]={saved:diskJson()};log('info','lReady');resetUndo();
 }
+/* ---------- 多个场景：每个场景存一份「存盘的版本」（S.scenes[id].saved）；现在打开的是 S.cur ---------- */
+const diskJson=()=>JSON.stringify([S.objs,S.env]);
+const sceneName=id=>(asset(id)||{}).name||'Untitled';
+function newSceneJson(){const keep=S.objs;S.objs=[];mkObj('camera',t('nCamera'),[0,1,-10]);const l=mkObj('light',t('nLight'),[0,3,0]);l.rot=[50,-30,0];const j=JSON.stringify([S.objs,defEnv()]);S.objs=keep;return j;}
+function sceneObjs(id){if(id===S.cur)return S.objs;const d=S.scenes[id];try{return d?JSON.parse(d.saved)[0]:[];}catch(e){return [];}}
+function createScene(){if(S.ptab!=='project')S.ptab='project';const a=mkAsset('scene','New Scene');S.scenes[a.id]={saved:newSceneJson()};S.renaming=a.id;select('asset',a.id);commit();
+  setTimeout(()=>{const r=$('#rn');if(r){r.focus();r.select();}},0);}
+// 打开另一个场景：有没保存的改动时，和 Unity 一样先问「保存 / 不保存 / 取消」
+function openScene(id,force){if(id===S.cur||!asset(id))return;if(S.playing){toast(t('stopBeforeScene'));return;}
+  if(S.dirty&&!force){openFloat('scenesave',t('sceneModT'),`<p>${esc(t('sceneModQ',sceneName(S.cur)))}</p><div class="gact"><button class="btn primary" data-sd="save">${t('sdSave')}</button><button class="btn" data-sd="nosave">${t('sdNoSave')}</button><button class="btn quiet" data-sd="cancel">${t('sdCancel')}</button></div>`,
+    f=>f.addEventListener('click',e=>{const b=e.target.closest('[data-sd]');if(!b)return;const k=b.dataset.sd;closeFloat();if(k==='save'){saveScene();openScene(id,true);}else if(k==='nosave')openScene(id,true);}));return;}
+  closeFloat();closeCode();
+  let d;try{d=JSON.parse((S.scenes[id]||{}).saved||newSceneJson());}catch(e){d=JSON.parse(newSceneJson());}
+  S.objs=d[0];S.env=Object.assign(defEnv(),d[1]||{});S.objs.forEach(fixObj);S.cur=id;S.collapsed=[];select(null);S.savedJson=snapJson();resetUndo();S.flags.opened=(S.flags.opened||[]).concat(sceneName(id));log('info','lSceneOpened',sceneName(id));commit();}
+// Scene List（File → Build Profiles）：打包后能加载的场景，第 0 个是游戏开始时打开的
+function openBuild(){const L_=S.sceneList.filter(x=>asset(x.id));
+  openFloat('build',t('buildT'),`<div class="subh">${t('sceneListT')}</div><div class="slist" data-drop="scenelist">${L_.length?L_.map((x,i)=>`<div class="slrow"><label class="ck"><input type="checkbox" data-sl="on" data-i="${i}"${x.on?' checked':''}> ${IC.scene(14)} ${esc(assetPath(asset(x.id)).replace(/\.cs$/,'.unity'))}</label><span class="sp"></span><button class="ibtn" data-sl="up" data-i="${i}" aria-label="${t('moveUp')}"${i?'':' disabled'}>▲</button><button class="ibtn rm" data-sl="rm" data-i="${i}" aria-label="✕">✕</button><b class="slidx">${x.on?L_.filter((y,k)=>y.on&&k<i).length:''}</b></div>`).join(''):`<p class="fnote">${esc(t('sceneListEmpty'))}</p>`}</div>
+  <div class="gact"><button class="btn" data-sl="addopen">${t('addOpenScenes')}</button></div><p class="fnote">${esc(t('sceneListNote'))}</p>`,
+  f=>{f.addEventListener('click',e=>{const b=e.target.closest('[data-sl]');if(!b||b.tagName==='INPUT')return;const k=b.dataset.sl,i=+b.dataset.i;
+      if(k==='addopen'){if(!S.sceneList.some(x=>x.id===S.cur))S.sceneList.push({id:S.cur,on:true});}
+      else if(k==='rm')S.sceneList.splice(i,1);else if(k==='up'&&i>0){const x=S.sceneList.splice(i,1)[0];S.sceneList.splice(i-1,0,x);}
+      commit();openBuild();});
+    f.addEventListener('change',e=>{if(e.target.dataset.sl==='on'){S.sceneList[+e.target.dataset.i].on=e.target.checked;commit();openBuild();}});});}
+// 播放中 SceneManager.LoadScene：只能加载 Scene List 里勾选的场景；加载的是存盘的版本
+function loadSceneByName(name,a,tm,re){const sc=S.assets.find(x=>x.type==='scene'&&x.name===name),inList=sc&&S.sceneList.some(x=>x.id===sc.id&&x.on);
+  if(!inList){onceErr(a,'ls_'+name,()=>logSrc('error','lSceneNotInList',[name],a,logLineOf(tm,re||/LoadScene/)));S.flags.sceneErr=true;return false;}
+  let d;try{d=JSON.parse((S.scenes[sc.id]||{}).saved);}catch(e){return false;}
+  stopSounds();if(document.pointerLockElement)document.exitPointerLock();
+  S.objs=d[0];S.objs.forEach(fixObj);S.env=Object.assign(defEnv(),d[1]||{});S.playScene=sc.id;S.frozen=false;select(null);
+  vel.clear();agentState.clear();animState.clear();trigIn=new Set();walkedNow=new Set();
+  log('info','lSceneLoaded',name);startSceneScripts();S.flags.loaded=(S.flags.loaded||[]).concat(name);commit();return true;}
 // 日志存 key + 参数，渲染时才翻译，切换语言后旧日志也会跟着变；src 指向脚本里的某一行
 const now8=()=>new Date().toTimeString().slice(0,8);
 function log(type,k,...a){S.logs.push({t:now8(),k,a,type});}
@@ -166,10 +198,12 @@ function redo(){if(S.playing||!redoS.length)return;closeMenu();undoS.push(modelJ
 const saveKey=m=>'ztg.'+(m||MODE)+'.save';let saveT=0;
 function saveProgress(){clearTimeout(saveT);saveT=setTimeout(saveNow,250);}
 function saveNow(){clearTimeout(saveT);if(!S||S.playing)return;
-  try{localStorage.setItem(saveKey(),JSON.stringify({v:1,uid,lang:ZTG.lang(),s:{objs:S.objs,prefabs:S.prefabs,assets:S.assets,env:S.env,step:S.step,flags:S.flags,cwd:S.cwd,logs:S.logs.slice(-60),savedJson:S.savedJson,collapsed:S.collapsed}}));}catch(e){}}
+  try{localStorage.setItem(saveKey(),JSON.stringify({v:1,uid,lang:ZTG.lang(),s:{objs:S.objs,prefabs:S.prefabs,assets:S.assets,env:S.env,cur:S.cur,scenes:S.scenes,sceneList:S.sceneList,step:S.step,flags:S.flags,cwd:S.cwd,logs:S.logs.slice(-60),savedJson:S.savedJson,collapsed:S.collapsed}}));}catch(e){}}
 function loadProgress(){let d=null;try{d=JSON.parse(localStorage.getItem(saveKey())||'null');}catch(e){}
   if(!d||d.v!==1||!d.s||!Array.isArray(d.s.objs)||!Array.isArray(d.s.assets))return false;
-  init();Object.assign(S,d.s);S.env=Object.assign(defEnv(),d.s.env||{});S.flags=Object.assign(freshFlags(),d.s.flags);S.collapsed=d.s.collapsed||[];uid=Math.max(uid,d.uid||1);
+  init();Object.assign(S,d.s);S.env=Object.assign(defEnv(),d.s.env||{});S.timeScale=1;S.playScene=null;
+  if(S.cur==null||!asset(S.cur)){const sc=S.assets.find(a=>a.type==='scene');S.cur=sc?sc.id:null;}S.scenes=S.scenes||{};S.sceneList=S.sceneList||[];
+  if(S.cur!=null&&!S.scenes[S.cur])S.scenes[S.cur]={saved:JSON.stringify([d.s.objs,S.env])};S.flags=Object.assign(freshFlags(),d.s.flags);S.collapsed=d.s.collapsed||[];uid=Math.max(uid,d.uid||1);
   S.objs.forEach(fixObj);
   if(d.lang&&d.lang!==ZTG.lang())renameDefaults(d.lang,ZTG.lang());
   resetUndo();return true;}
@@ -206,7 +240,7 @@ const IC={
   scene:(z,s)=>sv('<path d="M2 3h12v10H2z"/><path d="M2 10l4-3 3 2 2-1.5 3 2"/>',z,s),
   mat:(z,c)=>`<svg viewBox="0 0 16 16" width="${z||14}" height="${z||14}"><circle cx="8" cy="8" r="6.2" fill="${c||'#fff'}" stroke="rgba(0,0,0,.45)" stroke-width="1.1"/><path d="M4.6 5.4a4.6 4.6 0 0 1 3.4-1.7" stroke="rgba(255,255,255,.75)" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>`
 };
-const objIcon=(o,z)=>{const k=o.type==='light'&&o.light&&o.light.kind!=='directional'?(o.light.kind==='spot'?'spot':'bulb'):o.type==='empty'&&o.vol?'volume':o.type==='empty'&&o.audio?'audio':o.type;
+const objIcon=(o,z)=>{const k=o.type==='uipanel'?'uiimage':o.type==='light'&&o.light&&o.light.kind!=='directional'?(o.light.kind==='spot'?'spot':'bulb'):o.type==='empty'&&o.vol?'volume':o.type==='empty'&&o.audio?'audio':o.type;
   return (IC[k]||IC.cube)(z||14,o.prefab?'color:var(--accent)':'');};
 const assetIcon=(a,z)=>a.type==='anim'?IC.anim(z,'color:#7fd1ff'):a.type==='animctrl'?IC.animctrl(z,'color:#f0b24a'):a.type==='audio'?IC.audio(z,'color:#7fd1ff'):a.type==='material'?IC.mat(z,a.color):a.type==='prefab'?IC.cube(z,'color:var(--accent)'):a.type==='model'?IC.cube(z,'color:var(--ok)'):a.type==='itemdata'?IC.itemdata(z,`color:${a.color||'#9a6b3c'}`):(IC[a.type]||IC.folder)(z);
 
@@ -241,13 +275,13 @@ function createEmpty(){const o=mkObj('empty',t('nEmpty'));select('obj',o.id);log
 const items3D=()=>[{tk:'createEmpty',k:'empty',fn:createEmpty},{tk:'go3d',k:'go3d',children:SHAPES.map(s=>({tk:s,k:s,fn:()=>create3D(s)}))},
   {tk:'lightM',k:'lightm',children:[{tk:'dirLightM',k:'dirlight',fn:()=>createLight('directional')},{tk:'pointLightM',k:'pointlight',fn:()=>createLight('point')},{tk:'spotLightM',k:'spotlight',fn:()=>createLight('spot')}]},
   {tk:'volumeM',k:'volume',children:[{tk:'globalVolumeM',k:'globalvol',fn:createVolume}]},
-  {tk:'uiM',k:'ui',children:[{tk:'uiText',k:'uitext',fn:()=>createUI('uitext')},{tk:'uiImage',k:'uiimage',fn:()=>createUI('uiimage')},{tk:'uiSlider',k:'uislider',fn:()=>createUI('uislider')},{tk:'uiButton',k:'uibutton',fn:()=>createUI('uibutton')}]}];
+  {tk:'uiM',k:'ui',children:[{tk:'uiText',k:'uitext',fn:()=>createUI('uitext')},{tk:'uiImage',k:'uiimage',fn:()=>createUI('uiimage')},{tk:'uiSlider',k:'uislider',fn:()=>createUI('uislider')},{tk:'uiButton',k:'uibutton',fn:()=>createUI('uibutton')},{tk:'uiPanel',k:'uipanel',fn:()=>createUI('uipanel')}]}];
 // 和 Unity 一样：场景里没有画布时，先自动建一个画布和事件系统，UI 放在画布下面
 function createUI(kind){let c=S.objs.find(o=>o.type==='canvas');
   if(!c){c=mkObj('canvas',t('nCanvas'));if(!S.objs.some(o=>o.type==='eventsystem'))mkObj('eventsystem',t('nEventSystem'));}
-  const nk={uitext:'nText',uiimage:'nImage',uislider:'nSlider',uibutton:'nButton'}[kind];
-  const o=mkObj(kind,uniqueName(t(nk),c.id));o.parent=c.id;o.ui=Object.assign({anchor:'mc',x:0,y:0},UI_DEF[kind]);
-  S.collapsed=S.collapsed.filter(x=>x!==c.id);select('obj',o.id);log('info','lCreated',o.name);toast(t('created',o.name));commit();}
+  const nk={uitext:'nText',uiimage:'nImage',uislider:'nSlider',uibutton:'nButton',uipanel:'nPanel'}[kind];
+  const o=mkObj(kind,uniqueName(t(nk),c.id));o.parent=c.id;o.ui=Object.assign({anchor:'mc',x:0,y:0},JSON.parse(JSON.stringify(UI_DEF[kind])));if(kind==='uibutton')Object.assign(o.ui,{hl:'#f5f5f5',onClick:[]});
+  S.collapsed=S.collapsed.filter(x=>x!==c.id);select('obj',o.id);log('info','lCreated',o.name);toast(t('created',o.name));commit();return o;}
 // 灯光：方向光（像太阳）、点光源（灯泡）、聚光灯（手电筒）
 function createLight(kind){const o=mkObj('light',uniqueName(t({directional:'nLight',point:'nPointLight',spot:'nSpotLight'}[kind]),null));o.light=mkLight(kind);
   if(kind==='directional')o.rot=[50,-30,0];select('obj',o.id);log('info','lCreated',o.name);toast(t('created',o.name));commit();}
@@ -259,7 +293,7 @@ function createAsset(kind){
   const a=kind==='folder'?mkAsset('folder',t('nFolder')):kind==='material'?mkAsset('material',t('nMaterial'),null,{color:'#ffffff'}):mkAsset('script','NewBehaviourScript');
   S.renaming=a.id;select('asset',a.id);commit();
   setTimeout(()=>{const r=$('#rn');if(r){r.focus();r.select();}},0);}
-const itemsCreate=()=>[{tk:'create',k:'create',children:[{tk:'folderM',k:'folder',fn:()=>createAsset('folder')},{tk:'materialM',k:'mat',fn:()=>createAsset('material')},{tk:'scriptM',k:'script',fn:()=>createAsset('script')},
+const itemsCreate=()=>[{tk:'create',k:'create',children:[{tk:'folderM',k:'folder',fn:()=>createAsset('folder')},{tk:'sceneM',k:'scene',fn:createScene},{tk:'materialM',k:'mat',fn:()=>createAsset('material')},{tk:'scriptM',k:'script',fn:()=>createAsset('script')},
   // 只有项目里有 ItemData 脚本时才出现（[CreateAssetMenu] 的效果）
   ...(S.assets.some(a=>a.type==='script'&&a.name==='ItemData')?[{tk:'itemDataM',k:'itemdata',fn:createItemData}]:[])]}];
 const itemsComp=()=>[
@@ -273,6 +307,7 @@ const itemsComp=()=>[
 function deleteSel(){const a=selAsset(),tg=topSel();
   if(tg.length){const kill=new Set(tg.flatMap(subtree).map(x=>x.id));S.objs=S.objs.filter(x=>!kill.has(x.id));tg.forEach(o=>log('info','lDeleted',o.name));select(null);
     S.objs.forEach(x=>x.scripts.forEach(s=>{if(s.vals)for(const k in s.vals)if(typeof s.vals[k]==='number'&&kill.has(s.vals[k])&&k!=='speed')s.vals[k]=null;}));}
+  else if(a&&a.type==='scene'&&a.id!==S.cur){S.assets=S.assets.filter(x=>x!==a);delete S.scenes[a.id];S.sceneList=S.sceneList.filter(x=>x.id!==a.id);select(null);}
   else if(a&&a.type!=='scene'){const kill=new Set([a.id]);let ch=true;while(ch){ch=false;S.assets.forEach(x=>{if(!kill.has(x.id)&&kill.has(x.parent)){kill.add(x.id);ch=true;}});}
     S.assets=S.assets.filter(x=>!kill.has(x.id));S.assets.forEach(x=>{if(x.type==='animctrl')x.states.forEach(st=>{if(kill.has(st.clip))st.clip=null;});});
     S.objs.forEach(x=>{if(kill.has(x.mat))x.mat=null;if(x.audio&&kill.has(x.audio.clip))x.audio.clip=null;if(x.anim&&kill.has(x.anim.ctrl))x.anim=null;x.scripts=x.scripts.filter(s=>!kill.has(s.asset));});select(null);}
@@ -296,7 +331,7 @@ function duplicateSel(){const tg=topSel();if(!tg.length)return;const made=[];
 let clip=null;
 function copySel(){const tg=topSel();if(tg.length)clip=JSON.stringify(tg.map(subtree));}
 function pasteClip(){if(!clip)return;const o=selObj(),pid=o?o.parent:null;selectMany(JSON.parse(clip).map(tree=>insertTree(tree,pid,S.objs.length)));commit();}
-function saveScene(){S.savedJson=snapJson();S.flags.saved=true;log('info','lSaved');toast(t('saved'));commit();}
+function saveScene(){S.savedJson=snapJson();S.scenes[S.cur]={saved:diskJson()};S.flags.saved=true;log('info','lSaved');toast(t('saved'));commit();}
 
 function makePrefab(o,folder){
   if(o.prefab){toast(t('alreadyPrefab',o.name));return;}
@@ -517,7 +552,7 @@ function runDoor(o,s,a,tm,dt){const st=agentState.get('door'+o.id)||{};agentStat
 function runCatch(o,s,a,tm){const tg=s.vals.target!=null?obj(s.vals.target):null;if(!tg){unassigned(a,tm,'target','noTarget');return false;}
   const p=wPos(o),q=wPos(tg);if(Math.hypot(p[0]-q[0],p[1]-q[1],p[2]-q[2])>=(s.vals.catchDistance||0))return false;
   const m=s.vals.message!=null?obj(s.vals.message):null;if(!m||!m.ui){unassigned(a,tm,'message','noMsg');return false;}
-  m.ui.text='GAME OVER';S.frozen=true;S.flags.caught=true;log('info','lTimeScale');return true;}
+  m.ui.text='GAME OVER';S.frozen=true;S.timeScale=0;S.flags.caught=true;log('info','lTimeScale');return true;}
 // OnTriggerEnter：真 Unity 只调用名字完全对的方法；标签不存在时 CompareTag 会报错
 function trigEnter(tr,body){for(const s of tr.scripts){const a=asset(s.asset),tm=a&&LIB()[a.name];if(!s.enabled||!tm||!a.comp||!a.comp.ok)continue;
   if(tm.kind==='door'){const rt=a.comp.rt;if(rt.method!=='OnTriggerEnter'){onceErr(a,'cb',()=>log('warn','lNoCallback',a.name,rt.method));continue;}
@@ -527,7 +562,7 @@ function trigEnter(tr,body){for(const s of tr.scripts){const a=asset(s.asset),tm
   else if(tm.kind==='jumpscare'){if(body.tag!=='Player')continue;if(agentState.get('js'+tr.id))continue;
     trigFlash.set(a.id,performance.now()+900);agentState.set('js'+tr.id,{phase:'show',t:0});}
   else if(tm.kind==='exit'){trigFlash.set(a.id,performance.now()+900);if(body.tag!=='Player')continue;const m=s.vals.message!=null?obj(s.vals.message):null;
-    if(!m||!m.ui){unassigned(a,tm,'message','noMsg');continue;}m.ui.text='YOU ESCAPED';S.frozen=true;S.flags.escaped=true;log('info','lTimeScale');}}}
+    if(!m||!m.ui){unassigned(a,tm,'message','noMsg');continue;}m.ui.text='YOU ESCAPED';S.frozen=true;S.timeScale=0;S.flags.escaped=true;log('info','lTimeScale');}}}
 // 互动：从摄像机往前射线，打中的物体（或它的父物体）上有 Interactable 类的脚本，就显示提示；按键就调用它的 Use
 let simStatic={};
 const findInteractable=o=>{let q=o;while(q){const s=q.scripts.find(sc=>{const aa=asset(sc.asset),tt=aa&&LIB()[aa.name];return sc.enabled&&tt&&tt.interactable&&aa.comp&&aa.comp.ok;});if(s)return {o:q,s};q=par(q);}return null;};
@@ -576,13 +611,24 @@ function runJumpscare(o,s,a,tm,dt){const st=agentState.get('js'+o.id);if(!st||st
   st.t+=dt;const k=s.vals.shakeAmount||0;c.pos=st.camStart.map(v=>v+(Math.random()*2-1)*k);
   if(st.t>=(s.vals.showTime||0)){g.active=false;c.pos=st.camStart.slice();if(L_&&L_.light)L_.light.enabled=false;st.phase='done';S.flags.scared=true;if(L_&&L_.light)S.flags.scaredLit=true;}
   return true;}
-function runScripts(dt){let moving=false;const ran=new Set();walkedPrev=walkedNow;walkedNow=new Set();playT+=dt;
-  for(const o of S.objs){if(!isActive(o))continue;for(const s of o.scripts){const a=asset(s.asset);const tm=a&&LIB()[a.name];if(!s.enabled||!tm||!a.comp||!a.comp.ok)continue;ran.add(a.id);
+// 暂停菜单：Esc 切换；暂停时 Time.timeScale = 0（只有这类脚本还会跑），鼠标放开
+function runPause(o,s,a,tm){if(!pressedNow.has(a.comp.rt.key))return false;const st=agentState.get('pz'+o.id)||{paused:false};agentState.set('pz'+o.id,st);
+  if(st.paused)callMethod(o,s,'Resume');else{const pn=s.vals.pausePanel!=null?obj(s.vals.pausePanel):null;if(!pn){unassigned(a,tm,'pausePanel','noPanel');return false;}
+    pn.active=true;S.timeScale=a.comp.rt.zero==null?0:a.comp.rt.zero;st.paused=true;if(document.pointerLockElement)document.exitPointerLock();S.flags.paused=true;}return true;}
+// 按钮的 On Click 调用的 public 方法
+function callMethod(o,s,fn){const a=asset(s.asset),tm=a&&LIB()[a.name];if(!tm||!a.comp||!a.comp.ok)return;trigFlash.set(a.id,performance.now()+900);
+  if(tm.kind==='menu'){if(fn==='StartGame'){if(loadSceneByName(a.comp.rt.scene,a,tm))S.flags.startClicked=true;}
+    else if(fn==='QuitGame'){logSrc('info','raw',['Quit'],a,logLineOf(tm,/Debug\.Log/));log('info','lQuitIgnored');S.flags.quitClicked=true;}}
+  else if(tm.kind==='pause'){const st=agentState.get('pz'+o.id)||{};agentState.set('pz'+o.id,st);const pn=s.vals.pausePanel!=null?obj(s.vals.pausePanel):null;
+    if(fn==='Resume'){if(!pn){unassigned(a,tm,'pausePanel','noPanel');return;}pn.active=false;S.timeScale=1;st.paused=false;if(S.flags.paused)S.flags.resumed=true;if(fpsActive())lockMouse();}
+    else if(fn==='BackToMenu'){S.timeScale=1;if(loadSceneByName('MainMenu',a,tm,/"MainMenu"/))S.flags.backToMenu=true;}}}
+function runScripts(dt,onlyUnscaled){let moving=false;const ran=new Set();walkedPrev=walkedNow;walkedNow=new Set();playT+=dt;
+  for(const o of S.objs){if(!isActive(o))continue;for(const s of o.scripts){const a=asset(s.asset);const tm=a&&LIB()[a.name];if(!s.enabled||!tm||!a.comp||!a.comp.ok)continue;if(onlyUnscaled&&tm.kind!=='pause')continue;ran.add(a.id);
     if(!s.vals)s.vals={speed:5};
     let mv=false;if(tm.kind==='translate')mv=runPlayerMove(o,s,a,dt);else if(tm.kind==='fps')mv=runFPS(o,s,a,tm,dt);else if(tm.kind==='chase')mv=runChase(o,s,a,tm,dt);
     else if(tm.kind==='survival')mv=runSurvival(o,s,a,tm,dt);else if(tm.kind==='daynight')mv=runDayNight(o,s,a,dt);else if(tm.kind==='saveload')mv=runSaveLoad(o,s,a,tm);
     else if(tm.kind==='flicker')mv=runFlicker(o,s,a,tm,dt);else if(tm.kind==='footsteps')mv=runFootsteps(o,s,a,tm,dt);else if(tm.kind==='door')mv=runDoor(o,s,a,tm,dt);else if(tm.kind==='catch')mv=runCatch(o,s,a,tm);
-    else if(tm.kind==='interact')mv=runInteract(o,s,a,tm);else if(tm.kind==='jumpscare')mv=runJumpscare(o,s,a,tm,dt);
+    else if(tm.kind==='interact')mv=runInteract(o,s,a,tm);else if(tm.kind==='jumpscare')mv=runJumpscare(o,s,a,tm,dt);else if(tm.kind==='pause')mv=runPause(o,s,a,tm);
     if(mv)moving=a.id;}}
   mdx=mdy=0;pressedNow.clear();return {moving,ran};}
 
@@ -819,15 +865,25 @@ function drawCompare(){if(!cmp.on)return;const x=CW*cmp.x;gctx.fillStyle='#f0b24
   lab(t('beforeLbl'),x,'r');lab(t('afterLbl'),x,'l');}
 let uiKey='';
 function renderUI(game){const layer=$('#uilayer');const sel=new Set(selIds());
-  const els=S.objs.filter(o=>isUI(o)&&o.ui&&par(o)&&par(o).type==='canvas'&&isActive(o));
-  const key=JSON.stringify([CW,CH,game,els.map(o=>[o.id,o.type,o.ui,sel.has(o.id)])]);if(key===uiKey)return;uiKey=key;
-  const sf=CW/1920;layer.className=game?'':'preview';
-  layer.innerHTML=els.map(o=>{const u=o.ui,[ax,ay]=ANCH[u.anchor]||[.5,.5],w=u.w*sf,h=u.h*sf,cx=ax*CW+u.x*sf,cy=CH-(ay*CH+u.y*sf);
+  // 画布下面的 UI（也包括放在面板里的按钮、文字）
+  const inCanvas=o=>{let p=par(o);while(p){if(p.type==='canvas')return true;p=par(p);}return false;};
+  const els=S.objs.filter(o=>isUI(o)&&o.ui&&inCanvas(o)&&isActive(o));
+  const live=game&&S.playing&&S.objs.some(o=>o.type==='eventsystem'&&isActive(o));
+  const key=JSON.stringify([CW,CH,game,live,els.map(o=>[o.id,o.type,o.ui,sel.has(o.id)])]);if(key===uiKey)return;uiKey=key;
+  const sf=CW/1920;layer.className=game?(live?'live':''):'preview';
+  const rgba=(c,a)=>{const [r,g,b]=hex2rgb(c);return `rgba(${r},${g},${b},${a==null?1:clamp(a,0,1)})`;};
+  layer.innerHTML=els.map(o=>{const u=o.ui,[ax,ay]=ANCH[u.anchor]||[.5,.5],w=(u.stretch?1920:u.w)*sf,h=u.stretch?CH:u.h*sf,cx=u.stretch?CW/2:ax*CW+u.x*sf,cy=u.stretch?CH/2:CH-(ay*CH+u.y*sf);
     const st=`left:${cx-w/2}px;top:${cy-h/2}px;width:${w}px;height:${h}px;`,sc=sel.has(o.id)?' sel':'';
-    if(o.type==='uitext')return `<div class="uiel uitext${sc}" style="${st}color:${esc(u.color)};font-size:${u.size*sf}px">${esc(u.text)}</div>`;
-    if(o.type==='uiimage')return `<div class="uiel${sc}" style="${st}background:${esc(u.color)}"></div>`;
+    if(o.type==='uitext')return `<div class="uiel uitext${sc}" style="${st}color:${esc(u.color)};font-size:${u.size*sf}px;text-align:${u.align==='center'?'center':'left'}">${esc(u.text)}</div>`;
+    if(o.type==='uiimage'||o.type==='uipanel')return `<div class="uiel${sc}" style="${st}background:${rgba(u.color,u.alpha)}"></div>`;
     if(o.type==='uislider')return `<div class="uiel uislider${sc}" style="${st}background:${esc(u.color)}"><i style="width:${clamp(u.value,0,1)*100}%;background:${esc(u.fill)}"></i></div>`;
-    return `<div class="uiel uibutton${sc}" style="${st}background:${esc(u.color)};color:${esc(u.tcolor)};font-size:${u.size*sf}px">${esc(u.text)}</div>`;}).join('');}
+    return `<div class="uiel uibutton${sc}" data-uibtn="${o.id}" style="${st}--bg:${esc(u.color)};--hl:${esc(u.hl||u.color)};color:${esc(u.tcolor)};font-size:${u.size*sf}px">${esc(u.text)}</div>`;}).join('');}
+// 播放时点游戏画面里的按钮：要有事件系统（EventSystem），按钮的 On Click 里的方法才会被调用
+// 锁定鼠标（第一人称转头）：浏览器拒绝时（例如没有真的点击）安静地忽略
+function lockMouse(){try{const pr=cv.requestPointerLock();if(pr&&pr.catch)pr.catch(()=>{});}catch(e){}}
+$('#uilayer').addEventListener('click',e=>{const b=e.target.closest('[data-uibtn]');if(!b||!S.playing||!S.objs.some(q=>q.type==='eventsystem'&&isActive(q)))return;const o=obj(+b.dataset.uibtn);if(!o||!o.ui)return;
+  S.flags.btnClicked=true;for(const en of (o.ui.onClick||[])){const tg=en.obj!=null?obj(en.obj):null;if(!tg||!en.fn)continue;const [sn,fn]=en.fn.split('.');
+    const s=tg.scripts.find(x=>(asset(x.asset)||{}).name===sn);if(s)callMethod(tg,s,fn);}commit();});
 function fpsActive(){for(const o of S.objs)if(isActive(o))for(const s of o.scripts){const a=asset(s.asset);const tm=a&&LIB()[a.name];if(s.enabled&&tm&&tm.kind==='fps'&&a.comp&&a.comp.ok)return o;}return null;}
 function rayAt(x,y){if(!LV)return null;const d=mMV(LV.cam.M,norm([(x-CW/2)/LV.f,-(y-CH/2)/LV.f,1]));return {o:LV.cam.pos,d};}
 function axisParam(x,y,P0,A){const r=rayAt(x,y);if(!r)return null;const w0=sub(P0,r.o);const b=dot(A,r.d),d=dot(A,w0),e=dot(r.d,w0);const den=1-b*b;if(Math.abs(den)<1e-4)return null;return (b*e-d)/den;}
@@ -1039,7 +1095,7 @@ async function checkUpdates(manual){const show=h=>{const el=$('#updres');if(el)e
   }catch(e){if(manual)show(esc(t('updateErr')));}}
 $('#updbanner').addEventListener('click',()=>{if(window.ztgApp)ztgApp.openRelease();});
 $('#setbtn').addEventListener('click',openSettings);$('#helpbtn').addEventListener('click',openShortcuts);
-const FLOATS={anim:openAnimWin,animator:openAnimator,lighting:openLighting,lib:openLibrary,snaps:openSnaps,prefs:openPrefs,settings:openSettings,shortcuts:openShortcuts};
+const FLOATS={build:openBuild,anim:openAnimWin,animator:openAnimator,lighting:openLighting,lib:openLibrary,snaps:openSnaps,prefs:openPrefs,settings:openSettings,shortcuts:openShortcuts};
 
 /* ---------- 导出到真 Unity：把脚本和一份「怎么做」清单打成 zip ---------- */
 function crc32(b){let crc=-1;for(let i=0;i<b.length;i++){let c=(crc^b[i])&255;for(let k=0;k<8;k++)c=c&1?(c>>>1)^0xEDB88320:c>>>1;crc=(crc>>>8)^c;}return (crc^-1)>>>0;}
@@ -1075,10 +1131,12 @@ function exportGuide(l){const zh=l==='zh',v3=v=>`(${v.map(fmt).join(', ')})`,out
     if(o.type==='empty')return zh?'层级右键 → 创建空物体':'Hierarchy right-click → Create Empty';
     if(o.type==='light'){const k=o.light?o.light.kind:'directional',en={directional:'Directional Light',point:'Point Light',spot:'Spotlight'}[k];return (zh?'层级右键 → 灯光 → ':'Hierarchy right-click → Light → ')+en;}
     if(o.vol)return zh?'菜单 GameObject → Volume → Global Volume':'GameObject menu → Volume → Global Volume';
-    if(isUI(o)||o.type==='eventsystem')return zh?'层级右键 → UI → '+o.type.replace('ui',''):'Hierarchy right-click → UI → '+o.type.replace('ui','');
+    if(isUI(o)||o.type==='eventsystem'){const n={uitext:'Text - TextMeshPro',uiimage:'Image',uislider:'Slider',uibutton:'Button - TextMeshPro',uipanel:'Panel',canvas:'Canvas',eventsystem:'Event System'}[o.type]||o.type;return (zh?'层级右键 → UI → ':'Hierarchy right-click → UI → ')+n;}
     if(isModel(o))return zh?`素材库模型（${L(PROPS()[o.model]||{zh:'',en:''})}）：真 Unity 里可以用 Kenney 等免费模型代替`:`Asset Library model (${(PROPS()[o.model]||{}).en}): in real Unity use a free model, e.g. from Kenney`;return o.type;};
   const walk=(o,d)=>{const ind='  '.repeat(d),m=matOf(o);out.push(`${ind}- **${o.name}** — ${how(o)}${par(o)?(zh?`，放在 ${par(o).name} 下面`:`, as a child of ${par(o).name}`):''}`);
     if(!isUI(o))out.push(`${ind}  - Position ${v3(o.pos)}, Rotation ${v3(o.rot)}, Scale ${v3(effScale(o))}`);
+    else if(o.ui){const u=o.ui;out.push(`${ind}  - Rect Transform: ${u.stretch?'Stretch':`Anchor ${ZTG.tl('en','a_'+u.anchor)}, Pos (${fmt(u.x)}, ${fmt(u.y)}), Size ${fmt(u.w)} × ${fmt(u.h)}`}${u.text!=null?`; Text "${u.text}", Font Size ${fmt(u.size)}${u.align==='center'?', Alignment Center':''}`:''}; Color ${u.color}${u.alpha!=null&&u.alpha!==1?` (Alpha ${fmt(u.alpha)})`:''}${u.hl?`; Highlighted Color ${u.hl}`:''}`);
+      (u.onClick||[]).forEach(en=>{const tg=en.obj!=null?obj(en.obj):null;out.push(`${ind}  - On Click (): + → ${zh?'拖入':'drag in'} ${tg?tg.name:'None'} → ${en.fn?en.fn.replace('.',' → ')+'()':'No Function'}`);});}
     if(m)out.push(`${ind}  - ${zh?'材质':'Material'}: ${m.name}`);
     if(o.active===false)out.push(`${ind}  - ${zh?'取消勾选名字旁边的勾（开始时隐藏）':'Uncheck the box next to its name (hidden at start)'}`);
     if(o.light&&o.light.enabled===false)out.push(`${ind}  - ${zh?'取消勾选 Light 组件（开始时不亮）':'Uncheck the Light component (off at start)'}`);
@@ -1096,7 +1154,11 @@ function exportGuide(l){const zh=l==='zh',v3=v=>`(${v.map(fmt).join(', ')})`,out
     o.scripts.forEach(sc=>{const a=asset(sc.asset);if(!a)return;const vals=Object.entries(sc.vals||{}).map(([k,v])=>`${k} = ${Array.isArray(v)?v.map(id=>(asset(id)||{}).name).join(', '):typeof v==='number'?fmt(v):v!=null&&obj(v)?obj(v).name:'None'}`).join('; ');
       out.push(`${ind}  - ${zh?'把脚本拖上去':'Drag the script onto it'}: ${a.name}${vals?` (${vals})`:''}`);});
     kids(o).forEach(k=>walk(k,d+1));};
-  S.objs.filter(o=>!par(o)).forEach(o=>walk(o,0));
+  // 每个场景各列一次（菜单课有主菜单和走廊两个场景）
+  const scenes=S.assets.filter(a=>a.type==='scene'),live=S.objs;
+  if(S.sceneList.length){out.push(zh?'## Scene List（File → Build Profiles → Scene List，按这个顺序）\n':'## Scene List (File → Build Profiles → Scene List, in this order)\n');S.sceneList.forEach((x,i)=>{const a=asset(x.id);if(a)out.push(`${i}. ${a.name}${x.on?'':(zh?'（没勾选）':' (unchecked)')}`);});out.push('');}
+  for(const sc of scenes){if(scenes.length>1)out.push('',(zh?'### 场景 ':'### Scene ')+sc.name+(zh?'（项目右键 → 创建 → 场景，双击打开）':' (Project right-click → Create → Scene, double-click to open)'),'');
+    S.objs=sceneObjs(sc.id);try{S.objs.filter(o=>!par(o)).forEach(o=>walk(o,0));}finally{S.objs=live;}}
   out.push('',zh?'最后：文件 → 保存（Ctrl/Cmd+S），然后按播放试试。':'Finally: File → Save (Ctrl/Cmd+S), then press Play.');
   return out.join('\n')+'\n';}
 function buildExport(){const files=S.assets.filter(a=>a.type==='script').map(a=>({name:'Assets/Scripts/'+a.name+'.cs',data:scriptText(a)}));
@@ -1122,7 +1184,7 @@ let drag=null;
 cv.addEventListener('contextmenu',e=>e.preventDefault());
 cv.addEventListener('pointerdown',e=>{
   winClick(S.tab);
-  if(S.tab==='game'){if(document.activeElement&&document.activeElement!==document.body)document.activeElement.blur();if(S.playing&&fpsActive()){try{cv.requestPointerLock();}catch(err){}drag={t:'look'};cv.setPointerCapture(e.pointerId);}return;}
+  if(S.tab==='game'){if(document.activeElement&&document.activeElement!==document.body)document.activeElement.blur();if(S.playing&&fpsActive()){lockMouse();drag={t:'look'};cv.setPointerCapture(e.pointerId);}return;}
   const r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;cv.setPointerCapture(e.pointerId);
   const o=selObj();
   if(e.button!==0||S.tool==='q'){drag={t:'orbit',x:e.clientX,y:e.clientY};return;}
@@ -1176,7 +1238,9 @@ const HINT={
 Object.defineProperty(ZTG,'S',{get:()=>S,configurable:true});
 Object.assign(ZTG,{WORDER,WSEL,mkObj,mkAsset,select,P,FL,near,effScale,matOf,mats,asset,makePrefab,spawn,saveScene,ensureMats,instCount,isGray,isOrange,
   stopPlay,addScript,addRigidbody,setParent:reparent,compileScript,closeCode,bakeNav,inCameraView,setSetting,buildExport,enterMode,
-  lib:()=>LIB(),mkLight,wPos,wAABB,colBounds,uniqueName,importSound,openLighting,closeFloat,floatOpen:()=>floatId,isMesh,TAGS,
+  lib:()=>LIB(),openScene,openBuild,createUI,sceneObjs,curScene:()=>sceneName(S.cur),
+  createSceneAsset:(name,folder)=>{const a=mkAsset('scene',name,folder);S.scenes[a.id]={saved:newSceneJson()};return a;},
+  setSceneObjs:(id,objs)=>{if(id===S.cur){S.objs=objs;return;}const d=JSON.parse(S.scenes[id].saved);d[0]=objs;S.scenes[id].saved=JSON.stringify(d);},mkLight,wPos,wAABB,colBounds,uniqueName,importSound,openLighting,closeFloat,floatOpen:()=>floatId,isMesh,TAGS,
   setView:(target,dist,yaw,pitch)=>{V.target=target.slice();if(dist)V.dist=dist;if(yaw!=null)V.yaw=yaw;if(pitch!=null)V.pitch=pitch;},
   codeOpen:()=>codeId,codeDraft:b=>{const el=$(`#modal .blank[data-b="${b}"]`);return el?el.value:'';},codeDirty:()=>codeIsDirty(),hint:HINT});
 
@@ -1331,7 +1395,7 @@ function updateHint(){
 
 /* ---------- panels ---------- */
 function renderChrome(){
-  $('#scenename').textContent='SampleScene'+(S.dirty?' *':'');
+  $('#scenename').textContent=sceneName(S.playing&&S.playScene?S.playScene:S.cur)+(S.dirty&&!S.playing?' *':'');
   $('#tab-scene').classList.toggle('on',S.tab==='scene');$('#tab-game').classList.toggle('on',S.tab==='game');
   $$('#tools button').forEach(b=>b.classList.toggle('on',b.dataset.tool===S.tool));
   $('#tools').style.visibility=S.tab==='scene'?'visible':'hidden';
@@ -1346,7 +1410,7 @@ function renderHier(){
     rows.push(`<div class="hrow${ids.has(o.id)?' sel':''}${o.prefab?' pf':''}${isActive(o)?'':' off'}" style="padding-left:${10+(d-1)*14}px" data-obj="${o.id}" data-drag="obj:${o.id}" data-drop="obj:${o.id}"><span class="tw" ${ks.length?`data-tw="${o.id}"`:''}>${ks.length?(col?'▸':'▾'):''}</span>${objIcon(o)}<span>${esc(o.name)}</span></div>`);
     if(!col)ks.forEach(k=>walk(k,d+1));};
   S.objs.filter(o=>!par(o)).forEach(o=>walk(o,1));
-  $('#hier-body').innerHTML=`<div class="hrow root" data-drop="hroot"><span>▾</span>SampleScene${S.dirty?' *':''}</div>`+rows.join('');
+  $('#hier-body').innerHTML=`<div class="hrow root" data-drop="hroot"><span>▾</span>${esc(sceneName(S.playing&&S.playScene?S.playScene:S.cur))}${S.dirty&&!S.playing?' *':''}</div>`+rows.join('');
 }
 const srcLabel=src=>{const a=asset(src.a);return a?`${a.name}.cs:${src.l+1}`:'';};
 function renderProj(){
@@ -1408,12 +1472,21 @@ function uiInsp(o){
   if(!isUI(o)||!o.ui)return '';const u=o.ui;
   const num=(tk,b,v)=>`<div class="vrow"><label>${t(tk)}</label><div class="vin"><input inputmode="decimal" data-bind="${b}" value="${fmt(v)}" aria-label="${t(tk)}"></div></div>`;
   const col=(tk,b,v)=>`<div class="vrow"><label>${t(tk)}</label><div class="slot"><span class="sw" style="background:${esc(v)}"></span><input class="hexin" data-bind="${b}" value="${esc(v)}" maxlength="7" aria-label="${t(tk)}"></div></div>`;
-  let h=`<div class="comp">${head('rectTransform')}<div class="vrow"><label>${t('anchor')}</label><select class="schemesel" data-bind="anchor" aria-label="${t('anchor')}">${Object.keys(ANCH).map(k=>`<option value="${k}"${k===u.anchor?' selected':''}>${t('a_'+k)}</option>`).join('')}</select></div>
+  let h=u.stretch?`<div class="comp">${head('rectTransform')}${kv('anchor',t('a_stretch'))}</div>`:`<div class="comp">${head('rectTransform')}<div class="vrow"><label>${t('anchor')}</label><select class="schemesel" data-bind="anchor" aria-label="${t('anchor')}">${Object.keys(ANCH).map(k=>`<option value="${k}"${k===u.anchor?' selected':''}>${t('a_'+k)}</option>`).join('')}</select></div>
     <div class="vins2">${num('posX','ux',u.x)}${num('posY','uy',u.y)}${num('width','uw',u.w)}${num('height','uh',u.h)}</div></div>`;
-  if(o.type==='uitext')h+=`<div class="comp">${head('textComp')}<div class="vrow"><label>${t('textField')}</label><textarea class="uitextin" data-bind="utext" rows="2" aria-label="${t('textField')}">${esc(u.text)}</textarea></div>${num('fontSize','usize',u.size)}${col('colorL','ucolor',u.color)}</div>`;
-  if(o.type==='uiimage')h+=`<div class="comp">${head('imageComp')}${col('colorL','ucolor',u.color)}</div>`;
+  const alpha=`<div class="vrow"><label>${t('alphaL')}</label><div class="vin" style="max-width:110px"><input inputmode="decimal" data-bind="ualpha" value="${fmt(u.alpha==null?1:u.alpha)}" aria-label="${t('alphaL')}"></div></div>`;
+  if(o.type==='uitext')h+=`<div class="comp">${head('textComp')}<div class="vrow"><label>${t('textField')}</label><textarea class="uitextin" data-bind="utext" rows="2" aria-label="${t('textField')}">${esc(u.text)}</textarea></div>${num('fontSize','usize',u.size)}${col('colorL','ucolor',u.color)}
+    <div class="vrow"><label>${t('alignL')}</label><select class="schemesel" data-bind="ualign" aria-label="${t('alignL')}">${['left','center'].map(k=>`<option value="${k}"${(u.align||'left')===k?' selected':''}>${t('al_'+k)}</option>`).join('')}</select></div></div>`;
+  if(o.type==='uiimage'||o.type==='uipanel')h+=`<div class="comp">${head('imageComp')}${col('colorL','ucolor',u.color)}${alpha}</div>`;
   if(o.type==='uislider')h+=`<div class="comp">${head('sliderComp')}${num('valueL','uval',u.value)}${col('fillColor','ufill',u.fill)}${col('colorL','ucolor',u.color)}</div>`;
-  if(o.type==='uibutton')h+=`<div class="comp">${head('buttonComp')}<div class="vrow"><label>${t('textField')}</label><input class="hexin" data-bind="utext" value="${esc(u.text)}" aria-label="${t('textField')}"></div>${col('colorL','ucolor',u.color)}</div>`;
+  if(o.type==='uibutton'){const oc=u.onClick||[];
+    // On Click ()：每一项 = 一个物体 + 它身上脚本的一个 public 方法
+    const fnOpts=en=>{const tg=en.obj!=null?obj(en.obj):null;const list=tg?tg.scripts.flatMap(sc=>{const aa=asset(sc.asset),tt=aa&&LIB()[aa.name];return tt&&tt.methods?tt.methods.map(m=>aa.name+'.'+m):[];}):[];
+      return `<option value="">No Function</option>${list.map(f=>`<option value="${f}"${f===en.fn?' selected':''}>${f.replace('.',' → ')} ()</option>`).join('')}${en.fn&&!list.includes(en.fn)?`<option selected value="${esc(en.fn)}">${esc(en.fn)} (Missing)</option>`:''}`;};
+    h+=`<div class="comp">${head('buttonComp')}<div class="vrow"><label>${t('textField')}</label><input class="hexin" data-bind="utext" value="${esc(u.text)}" aria-label="${t('textField')}"></div>${col('normalColor','ucolor',u.color)}${col('hlColor','uhl',u.hl||u.color)}
+      <div class="subh">On Click ()</div><div class="oclist">${oc.map((en,i)=>{const tg=en.obj!=null?obj(en.obj):null;return `<div class="ocrow"><div class="slot objref${tg?'':' none'}" data-drop="onclick:${o.id}:${i}" title="${esc(t('dropObj'))}">${tg?objIcon(tg,12)+' '+esc(tg.name):'None (Object)'}</div>
+        <select class="schemesel" data-bind="ocfn.${i}" aria-label="${t('ocFunc')}"${tg?'':' disabled'}>${fnOpts(en)}</select><button class="ibtn rm" data-act="ocrm" data-i="${i}" aria-label="✕">✕</button></div>`;}).join('')||`<p class="fnote">${esc(t('ocEmpty'))}</p>`}</div>
+      <div class="gact"><button class="btn small" data-act="ocadd" aria-label="${t('ocAdd')}">+</button></div></div>`;}
   return h;}
 function renderInsp(){
   const b=$('#insp-body');const o=selObj(),a=selAsset(),os=selObjs();
@@ -1483,7 +1556,10 @@ $('#insp-body').addEventListener('change',e=>{const el=e.target,b=el.dataset.bin
   else if(o&&o.rb&&k==='rbk'){o.rb.isKinematic=el.checked;}
   else if(o&&o.ui&&k==='anchor')o.ui.anchor=el.value;
   else if(o&&o.ui&&k==='utext')o.ui.text=el.value;
-  else if(o&&o.ui&&(k==='ucolor'||k==='ufill')){if(/^#[0-9a-f]{6}$/i.test(el.value))o.ui[k==='ucolor'?'color':'fill']=el.value.toLowerCase();}
+  else if(o&&o.ui&&(k==='ucolor'||k==='ufill'||k==='uhl')){if(/^#[0-9a-f]{6}$/i.test(el.value))o.ui[{ucolor:'color',ufill:'fill',uhl:'hl'}[k]]=el.value.toLowerCase();}
+  else if(o&&o.ui&&k==='ualpha'){if(!isNaN(num))o.ui.alpha=clamp(num,0,1);}
+  else if(o&&o.ui&&k==='ualign')o.ui.align=el.value;
+  else if(o&&o.ui&&k==='ocfn'&&o.ui.onClick&&o.ui.onClick[+i])o.ui.onClick[+i].fn=el.value;
   else if(o&&o.ui&&['ux','uy','uw','uh','usize','uval'].includes(k)){if(!isNaN(num))o.ui[{ux:'x',uy:'y',uw:'w',uh:'h',usize:'size',uval:'value'}[k]]=k==='uval'?clamp(num,0,1):num;}
   else if(o&&o.light&&k==='ltype')o.light.kind=el.value;
   else if(o&&o.light&&k==='lcolor'){if(/^#[0-9a-f]{6}$/i.test(el.value))o.light.color=el.value.toLowerCase();}
@@ -1517,6 +1593,8 @@ $('#insp-body').addEventListener('click',e=>{const b=e.target.closest('[data-act
   else if(act==='openanimator'){if(a&&a.type==='animctrl')animrWin.ctrl=a.id;openAnimator();}
   else if(act==='openanimwin')openAnimWin();
   else if(act==='setc'){const inp=$(`#insp-body [data-bind="${b.dataset.b}"]`);if(inp){inp.value=b.dataset.c;inp.dispatchEvent(new Event('change',{bubbles:true}));}}
+  else if(act==='ocadd'&&o&&o.ui){(o.ui.onClick=o.ui.onClick||[]).push({obj:null,fn:''});commit();}
+  else if(act==='ocrm'&&o&&o.ui&&o.ui.onClick){o.ui.onClick.splice(+b.dataset.i,1);commit();}
   else if(act==='clrclip'&&o&&o.audio){o.audio.clip=null;commit();}
   else if(act==='preview'&&ZTG.audio){ZTG.audio.play(b.dataset.k,{volume:.9});}
   else if(act==='volnew'&&o&&o.vol){o.vol.profile='Global Volume Profile';log('info','lProfile');commit();}
@@ -1540,7 +1618,7 @@ $('#hier-plus').dataset.plus='1';$('#hier-plus').addEventListener('click',e=>{co
 $('#proj-plus').dataset.plus='1';$('#proj-plus').addEventListener('click',e=>{const r=e.currentTarget.getBoundingClientRect();openMenu(itemsCreate(),r.left,r.bottom+2);});
 // 双击自己判断：第一下点击会重画项目窗口，浏览器的 dblclick 事件因此不会触发
 let lastTile={id:null,t:0};
-function openAsset(a){if(a.type==='folder'){S.cwd=a.id;select(null);commit();}else if(a.type==='script')openCode(a.id);else if(a.type==='animctrl'){animrWin.ctrl=a.id;openAnimator();}}
+function openAsset(a){if(a.type==='scene'){openScene(a.id);return;}if(a.type==='folder'){S.cwd=a.id;select(null);commit();}else if(a.type==='script')openCode(a.id);else if(a.type==='animctrl'){animrWin.ctrl=a.id;openAnimator();}}
 $('#proj-body').addEventListener('click',e=>{
   const ln=e.target.closest('[data-sa]');if(ln){openCode(+ln.dataset.sa,+ln.dataset.sl);return;}
   const bt=e.target.closest('[data-act="cwd"]');if(bt){S.cwd=+bt.dataset.id;commit();return;}
@@ -1577,6 +1655,7 @@ function performDrop(pl,tgt,x,y){const [kind,ids]=pl.split(':');const id=+ids;co
     if(dv.startsWith('alist:')){const [,oid,si,fid]=dv.split(':');const host=obj(+oid),s=host&&host.scripts[+si];if(!s)return;
       if(a.type!=='itemdata'){log('warn','lWrongRef','ItemData');toast(t('lWrongRef','ItemData'));commit();return;}
       s.vals=s.vals||{};(s.vals[fid]=s.vals[fid]||[]).push(a.id);commit();return;}
+    if(dv==='scenelist'){if(a.type==='scene'&&!S.sceneList.some(x=>x.id===a.id))S.sceneList.push({id:a.id,on:true});commit();if(floatId==='build')openBuild();return;}
     if(dv==='objs'){const os=selObjs().filter(isRender);if(a.type!=='material'||!os.length){log('warn','lBadDrop');commit();return;}os.forEach(q=>{q.mat=a.id;});log('info','lMatMany',a.name,os.length);toast(t('lMatMany',a.name,os.length));commit();return;}
     if(dv.startsWith('aclip:')){const host=obj(+dv.slice(6));if(!host||!host.audio)return;if(a.type!=='audio'){log('warn','lWrongRef','AudioClip');toast(t('lWrongRef','AudioClip'));commit();return;}host.audio.clip=a.id;commit();return;}
     if(dv.startsWith('obj:'))applyAsset(a,obj(+dv.slice(4)));
@@ -1586,6 +1665,8 @@ function performDrop(pl,tgt,x,y){const [kind,ids]=pl.split(':');const id=+ids;co
     else if((dv==='hier'||dv==='hroot')&&a.type==='model')spawnModel(a);
     else if(dv.startsWith('folder:'))moveAsset(a,+dv.slice(7));else if(dv==='proj')moveAsset(a,S.cwd);}
   else if(kind==='obj'){const o=obj(id);if(!o)return;
+    // 把物体拖到按钮 On Click 的格子上
+    if(dv.startsWith('onclick:')){const [,bid,i]=dv.split(':');const b=obj(+bid);if(!b||!b.ui||!b.ui.onClick||!b.ui.onClick[+i])return;const en=b.ui.onClick[+i];if(en.obj!==o.id){en.obj=o.id;en.fn='';}commit();return;}
     // 把物体拖到脚本的 Transform 格子上 = 指定 target
     if(dv.startsWith('ref:')){const [,oid,si,fid]=dv.split(':');const host=obj(+oid),s=host&&host.scripts[+si];if(!s)return;
       const f=(tmplOf(asset(s.asset)||{name:''}).fields||[]).find(x=>x.id===fid);
@@ -1648,7 +1729,7 @@ function runViz(moving,looking){if(codeId==null)return;const a=asset(codeId);if(
 
 /* ---------- menus, play, keys ---------- */
 const MENUS={
-  file:()=>[{tk:'save',k:'save',fn:saveScene},{tk:'saveAs',dis:true},{tk:'exportM',k:'export',fn:exportUnity}],
+  file:()=>[{tk:'save',k:'save',fn:saveScene},{tk:'saveAs',dis:true},{tk:'buildM',k:'buildprofiles',fn:openBuild},{tk:'exportM',k:'export',fn:exportUnity}],
   edit:()=>[{tk:'undo',k:'undo',fn:undo,dis:!undoS.length||S.playing},{tk:'redo',k:'redo',fn:redo,dis:!redoS.length||S.playing},
     {tk:'dup',k:'dup',fn:duplicateSel,dis:!selIds().length},{tk:'copy',k:'copy',fn:copySel,dis:!selIds().length},{tk:'paste',k:'paste',fn:pasteClip,dis:!clip},{tk:'del',k:'del',fn:deleteSel},
     {tk:'clearPrefs',k:'clearprefs',fn:()=>{prefsSet({});log('info','lPrefsCleared');toast(t('lPrefsCleared'));commit();if(floatId==='prefs')openPrefs();}}],
@@ -1659,14 +1740,16 @@ function startPlay(){if(S.playing)return;
   S.assets.forEach(a=>{const tm=a.type==='script'&&LIB()[a.name];if(tm&&!tm.blanks.length&&!a.comp)compileScript(a);});
   if(compileErrs().length){toast(t('fixBeforePlay'));S.ptab='console';commit();return;}
   S.snap=snapJson();S.playing=true;S.paused=false;S.tab='game';S.flags.played=true;S.flags.playDist=0;vel.clear();playErr.clear();agentState.clear();trigIn=new Set();mdx=mdy=0;updCount=0;codeHot=performance.now()+900;log('info','lPlay');
-  // Start()：Debug.Log 把空格里写的那句话打印到控制台，点它会跳到那一行
-  for(const o of S.objs)for(const s of o.scripts){const a=asset(s.asset);const tm=a&&LIB()[a.name];if(!s.enabled||!tm||!a.comp||!a.comp.ok)continue;
+  // 键盘焦点不要留在检查器的输入框里，不然 W A S D 会打进输入框
+  S.frozen=false;S.timeScale=1;S.playScene=null;playT=0;simStatic={};stopSounds();walkedNow=new Set();animState.clear();if(document.activeElement&&document.activeElement!==document.body)document.activeElement.blur();
+  startSceneScripts();commit();}
+// 场景开始时：Start() 里的 Debug.Log、背包清单、唤醒时播放的声音
+function startSceneScripts(){
+  for(const o of S.objs)for(const s of o.scripts){const a=asset(s.asset);const tm=a&&LIB()[a.name];if(!s.enabled||!tm||!a.comp||!a.comp.ok||!isActive(o))continue;
     const ln=blankPos('msg',{},tm).line;if(ln>=0)S.logs.push({t:now8(),k:'raw',a:[a.comp.rt.msg],type:'info',src:{a:a.id,l:ln}});
     if(tm.kind==='inventory')startInventory(o,s,a,tm);}
-  // 键盘焦点不要留在检查器的输入框里，不然 W A S D 会打进输入框
-  S.frozen=false;playT=0;simStatic={};stopSounds();walkedNow=new Set();animState.clear();if(document.activeElement&&document.activeElement!==document.body)document.activeElement.blur();for(const o of S.objs)if(o.audio&&o.audio.awake&&o.audio.clip!=null&&isActive(o))playSource(o);
-  commit();}
-function stopPlay(){if(!S.playing)return;const [objs,prefabs,en]=JSON.parse(S.snap);S.objs=objs;S.prefabs=prefabs;if(en)S.env=en;S.playing=false;S.paused=false;S.frozen=false;stopSounds();
+  for(const o of S.objs)if(o.audio&&o.audio.awake&&o.audio.clip!=null&&isActive(o))playSource(o);}
+function stopPlay(){if(!S.playing)return;const [objs,prefabs,en]=JSON.parse(S.snap);S.objs=objs;S.prefabs=prefabs;if(en)S.env=en;S.playing=false;S.paused=false;S.frozen=false;S.timeScale=1;S.playScene=null;stopSounds();
   if(S.flags.hitWall)S.flags.fpsStopped=true;if(S.flags.animLooped)S.flags.animStopped=true;
   if(document.pointerLockElement)document.exitPointerLock();trigIn=new Set();agentState.clear();animState.clear();
   if(S.flags.movedInPlay)S.flags.stopped=true;if(S.flags.fell)S.flags.fellStopped=true;
@@ -1717,11 +1800,12 @@ function applyStatic(){
   $('#ch1desc').textContent=t('ch1desc',ZTG.chapters.ch1.steps.length);
   $('#ch1btitle').textContent=L(ZTG.chapters.ch1b.title);$('#ch1blabel').textContent=L(ZTG.chapters.ch1b.label);$('#chbugs1blabel').textContent=L(ZTG.chapters.ch1b.label);
   $('#ch1bdesc').textContent=t('ch1bdesc',ZTG.chapters.ch1b.steps.length);
+  const cm=ZTG.chapters.chmenu;$('#chmenutitle').textContent=L(cm.title);$('#chmenulabel').textContent=L(cm.label);$('#chbugsmenulabel').textContent=L(cm.label);$('#chmenudesc').textContent=t('chmenuDesc',cm.steps.length);
   $('#chaptag').textContent=chapTag();
   $$('.langbtn').forEach(b=>{b.textContent=ZTG.lang()==='zh'?'English':'中文';});
 }
 // 切换语言时，还没改过名字的默认物体（主摄像机、立方体 (1)……）跟着换成新语言的名字
-const DEFAULT_NAMES=['nPointLight','nSpotLight','nGlobalVolume','nCamera','nLight','nCube','nPlane','nFolder','nMaterial','nSphere','nCapsule','nCylinder','nQuad','nEmpty','nCanvas','nText','nImage','nSlider','nButton','nEventSystem'];
+const DEFAULT_NAMES=['nPanel','nPointLight','nSpotLight','nGlobalVolume','nCamera','nLight','nCube','nPlane','nFolder','nMaterial','nSphere','nCapsule','nCylinder','nQuad','nEmpty','nCanvas','nText','nImage','nSlider','nButton','nEventSystem'];
 function renameDefaults(from,to){
   const pairs=DEFAULT_NAMES.map(k=>[ZTG.tl(from,k),ZTG.tl(to,k)]);
   const ren=x=>{const m=/^(.*?)(\s\(\d+\))?$/.exec(x.name);const p=pairs.find(q=>q[0]===m[1]);if(p)x.name=p[1]+(m[2]||'');};
@@ -1746,7 +1830,7 @@ addEventListener('keydown',e=>{
   if(e.key==='?'&&!/INPUT|TEXTAREA|SELECT/.test((e.target||{}).tagName||'')){openShortcuts();return;}
   const typing=/INPUT|TEXTAREA|SELECT/.test((e.target||{}).tagName||''),mod=e.ctrlKey||e.metaKey,k=e.key.toLowerCase();
   if(mod&&k==='s'){e.preventDefault();if(codeId!=null){saveCode();return;}if(S.playing){toast(t('stopBeforeSave'));return;}saveScene();return;}
-  if(e.key==='Escape'){closeMenu();closeCode();closeFloat();return;}
+  if(e.key==='Escape'){closeMenu();closeCode();closeFloat();if(S.playing&&!e.repeat)pressedNow.add('Escape');return;}
   if(typing)return;
   if(mod&&k==='z'){e.preventDefault();if(e.shiftKey)redo();else undo();return;}
   if(mod&&k==='y'){e.preventDefault();redo();return;}
@@ -1765,7 +1849,8 @@ addEventListener('keyup',e=>keys.delete(e.code));addEventListener('blur',()=>key
 let last=0,lastTick=0;
 function frame(ts){const dt=Math.min(.05,(ts-last)/1000||0);last=ts;let moving=false,looking=false;
   if(S.playing)updateSounds();
-  if(S.playing&&!S.paused&&!S.frozen){looking=Math.abs(mdx)+Math.abs(mdy)>0;COLS=colList();const r=runScripts(dt);moving=r.moving;
+  if(S.playing&&!S.paused&&S.timeScale===0){runScripts(0,true);}
+  if(S.playing&&!S.paused&&S.timeScale>0){looking=Math.abs(mdx)+Math.abs(mdy)>0;COLS=colList();const r=runScripts(dt);moving=r.moving;
     if(codeId!=null&&r.ran.has(codeId))updCount++;
     runAnimators(dt);COLS=colList();rbPhysics(dt);COLS=colList();if(triggers())S.sig='';}
   else{mdx=mdy=0;}

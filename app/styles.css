@@ -211,7 +211,15 @@ button.chap .st.done{background:var(--ok);color:#fff}
 .uiel.sel{outline:1.5px dashed #ff9a1f;outline-offset:1px}
 .uitext{white-space:pre-line;line-height:1.15;font-family:var(--ui)}
 .uislider{border-radius:999px;overflow:hidden}.uislider i{display:block;height:100%}
-.uibutton{display:flex;align-items:center;justify-content:center;border-radius:4px;font-family:var(--ui)}
+.uibutton{display:flex;align-items:center;justify-content:center;border-radius:4px;font-family:var(--ui);background:var(--bg)}
+#uilayer.live .uibutton{pointer-events:auto;cursor:pointer}
+#uilayer.live .uibutton:hover{background:var(--hl)}
+#uilayer.live .uibutton:active{filter:brightness(.78)}
+.oclist{display:flex;flex-direction:column;gap:6px;margin:4px 0}
+.ocrow{display:flex;align-items:center;gap:4px}.ocrow .slot{flex:1;min-width:0}.ocrow select{max-width:48%}
+.slist{border:1px solid var(--line);border-radius:6px;min-height:70px;padding:4px}
+.slrow{display:flex;align-items:center;gap:4px;padding:3px 4px;border-bottom:1px solid var(--line);font-size:12px}.slrow:last-child{border-bottom:0}
+.slidx{min-width:18px;text-align:right;color:var(--muted)}
 .vins2{display:grid;grid-template-columns:1fr 1fr;gap:0 8px}
 .uitextin{width:100%;font:inherit;font-size:12px;color:var(--fg);background:var(--field);border:1px solid var(--line);border-radius:5px;padding:3px 6px;resize:vertical}
 .alist{flex-wrap:wrap;gap:4px;min-height:30px}.alist .none{color:var(--muted);font-size:12px;font-style:italic}
