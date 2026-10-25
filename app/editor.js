@@ -26,8 +26,10 @@ function setSetting(k,v){SET[k]=v;lsSet('ztg.settings',JSON.stringify(SET));if(k
 function applyZoom(){const z=SET.zoom||1;if(window.ztgApp&&ztgApp.setZoom)ztgApp.setZoom(z);else document.documentElement.style.zoom=z===1?'':String(z);}
 // 模式：ch0 / ch1（教学）、free（自由模式）、bugs / bugs1（第 0 / 1 章的找 Bug 挑战），各自有自己的存档
 let MODE='ch0';
-const chapNum=m=>{const r=/^(?:ch|bugs)(\d)$/.exec(m||MODE);return r?+r[1]:0;};
-const isLesson=()=>/^ch\d$/.test(MODE),isBugs=()=>/^bugs\d?$/.test(MODE);
+// 章节的 key：'0'、'1'、'1b'（第 1 章下篇）。模式名是 'ch' + key 或 'bugs' + key（第 0 章的找 Bug 是 'bugs'）
+const chapKey=m=>{const r=/^(?:ch|bugs)(\w+)$/.exec(m||MODE);return r?r[1]:'0';};
+const isLesson=()=>/^ch\w+$/.test(MODE),isBugs=()=>/^bugs\w*$/.test(MODE);
+const CHAPS=['0','1','1b'];
 
 /* ---------- 3D math (Unity convention: left-handed, Y up, Z forward) ---------- */
 function rotV(v,e){let [x,y,z]=v;const [ax,ay,az]=e.map(d=>d*Math.PI/180);
@@ -91,13 +93,14 @@ function mkObj(type,name,pos,scale){const o={id:nid(),type,name,parent:null,pos:
   light:type==='light'?mkLight('directional'):null,cam:type==='camera'?{post:false}:null};S.objs.push(o);return o;}
 // 旧存档里没有的字段补上默认值
 function fixObj(o){if(o.col===undefined)o.col=MESH_COL[o.type]?{kind:MESH_COL[o.type],trigger:false,seq:0}:null;if(!o.tag)o.tag=o.type==='camera'?'MainCamera':'Untagged';if(!o.layer)o.layer='Default';
-  for(const k of ['cc','agent','navs','rb','audio','vol'])if(o[k]===undefined)o[k]=null;if(o.parent===undefined)o.parent=null;
+  for(const k of ['cc','agent','navs','rb','audio','vol','anim'])if(o[k]===undefined)o[k]=null;if(o.parent===undefined)o.parent=null;
   if(o.type==='light'&&!o.light)o.light=mkLight('directional');if(o.type==='camera'&&!o.cam)o.cam={post:false};
   (o.scripts||[]).forEach(s=>{if(!s.vals)s.vals={speed:s.speed!=null?s.speed:5};});}
 function mkAsset(type,name,parent,extra){const a=Object.assign({id:nid(),type,name,parent:parent==null?S.cwd:parent},type==='script'?{blanks:{},comp:null}:{},extra||{});S.assets.push(a);return a;}
 const obj=id=>S.objs.find(o=>o.id===id), asset=id=>S.assets.find(a=>a.id===id);
 const freshFlags=()=>({win:[],winMsg:'',moved:false,rotated:false,scaled:false,maxInst:0,wide:false,viewed:false,played:false,playDist:0,movedInPlay:false,stopped:false,fell:false,fellStopped:false,saved:false,
-  hitWall:false,fpsStopped:false,steps:0,flickered:false,doorOpened:false,navErr:false,chased:false,caught:false,escaped:false});
+  hitWall:false,fpsStopped:false,steps:0,flickered:false,doorOpened:false,navErr:false,chased:false,caught:false,escaped:false,
+  animLooped:false,animStopped:false,animDone:false,lookedAt:false,torchTaken:false,keyTaken:false,lockedSeen:false,doorUsed:false,scared:false,scaredLit:false,keyed:false,recorded:false,recStopped:false});
 function init(){
   S={objs:[],prefabs:{},assets:[],env:defEnv(),sel:null,multi:[],collapsed:[],tool:'w',tab:'scene',cwd:0,ptab:'project',step:0,playing:false,paused:false,snap:null,renaming:null,logs:[],savedJson:'',sig:'',dirty:false,flags:freshFlags()};
   mkObj('camera',t('nCamera'),[0,1,-10]);const l=mkObj('light',t('nLight'),[0,3,0]);l.rot=[50,-30,0];
@@ -116,6 +119,8 @@ const mats=()=>S.assets.filter(a=>a.type==='material');
 
 /* ---------- parent / child ---------- */
 const par=o=>o.parent!=null?obj(o.parent):null;
+// 物体名字旁边的勾（SetActive）：自己或任何一层父物体没勾，就看不见、不碰撞、脚本不跑
+const isActive=o=>{let q=o;while(q){if(q.active===false)return false;q=par(q);}return true;};
 const kids=o=>S.objs.filter(x=>x.parent===o.id);
 const subtree=o=>[o,...kids(o).flatMap(subtree)];
 const isAnc=(a,o)=>{let p=par(o);while(p){if(p===a)return true;p=par(p);}return false;};
@@ -193,6 +198,8 @@ const IC={
   volume:(z,s)=>sv('<rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 11l2.2-3 1.6 2L10.5 7 12 11"/>',z,s),
   bulb:(z,s)=>sv('<circle cx="8" cy="6.5" r="4"/><path d="M6.3 11.5h3.4M6.8 14h2.4"/>',z,s),
   spot:(z,s)=>sv('<path d="M5 2.5h6l-1.5 4h-3z"/><path d="M6.5 6.5 3 14h10l-3.5-7.5"/>',z,s),
+  anim:(z,s)=>sv('<path d="M2 8h12"/><path d="M4 8l2-2.2L8 8l-2 2.2zM10 8l2-2.2L14 8l-2 2.2z"/>',z,s),
+  animctrl:(z,s)=>sv('<rect x="1.5" y="2.5" width="5" height="4" rx="1"/><rect x="9.5" y="9.5" width="5" height="4" rx="1"/><path d="M6.5 4.5h3v5"/>',z,s),
   itemdata:(z,s)=>sv('<path d="M8 1.5 14 8 8 14.5 2 8z"/><path d="M8 5v6M5 8h6"/>',z,s),
   folder:(z,s)=>sv('<path d="M1.5 4.5h5l1.2 1.5h6.8v6.8h-13z"/>',z,s),
   script:(z,s)=>sv('<path d="M3.5 1.5h6l3 3v10h-9z"/><path d="M6 8l-1.5 1.5L6 11M10 8l1.5 1.5L10 11"/>',z,s),
@@ -201,7 +208,7 @@ const IC={
 };
 const objIcon=(o,z)=>{const k=o.type==='light'&&o.light&&o.light.kind!=='directional'?(o.light.kind==='spot'?'spot':'bulb'):o.type==='empty'&&o.vol?'volume':o.type==='empty'&&o.audio?'audio':o.type;
   return (IC[k]||IC.cube)(z||14,o.prefab?'color:var(--accent)':'');};
-const assetIcon=(a,z)=>a.type==='audio'?IC.audio(z,'color:#7fd1ff'):a.type==='material'?IC.mat(z,a.color):a.type==='prefab'?IC.cube(z,'color:var(--accent)'):a.type==='model'?IC.cube(z,'color:var(--ok)'):a.type==='itemdata'?IC.itemdata(z,`color:${a.color||'#9a6b3c'}`):(IC[a.type]||IC.folder)(z);
+const assetIcon=(a,z)=>a.type==='anim'?IC.anim(z,'color:#7fd1ff'):a.type==='animctrl'?IC.animctrl(z,'color:#f0b24a'):a.type==='audio'?IC.audio(z,'color:#7fd1ff'):a.type==='material'?IC.mat(z,a.color):a.type==='prefab'?IC.cube(z,'color:var(--accent)'):a.type==='model'?IC.cube(z,'color:var(--ok)'):a.type==='itemdata'?IC.itemdata(z,`color:${a.color||'#9a6b3c'}`):(IC[a.type]||IC.folder)(z);
 
 /* ---------- context menu ---------- */
 // 菜单项：{tk: 文字的 i18n key, k: 稳定 id（给教练箭头定位用）, fn, children, dis}
@@ -267,7 +274,8 @@ function deleteSel(){const a=selAsset(),tg=topSel();
   if(tg.length){const kill=new Set(tg.flatMap(subtree).map(x=>x.id));S.objs=S.objs.filter(x=>!kill.has(x.id));tg.forEach(o=>log('info','lDeleted',o.name));select(null);
     S.objs.forEach(x=>x.scripts.forEach(s=>{if(s.vals)for(const k in s.vals)if(typeof s.vals[k]==='number'&&kill.has(s.vals[k])&&k!=='speed')s.vals[k]=null;}));}
   else if(a&&a.type!=='scene'){const kill=new Set([a.id]);let ch=true;while(ch){ch=false;S.assets.forEach(x=>{if(!kill.has(x.id)&&kill.has(x.parent)){kill.add(x.id);ch=true;}});}
-    S.assets=S.assets.filter(x=>!kill.has(x.id));S.objs.forEach(x=>{if(kill.has(x.mat))x.mat=null;if(x.audio&&kill.has(x.audio.clip))x.audio.clip=null;x.scripts=x.scripts.filter(s=>!kill.has(s.asset));});select(null);}
+    S.assets=S.assets.filter(x=>!kill.has(x.id));S.assets.forEach(x=>{if(x.type==='animctrl')x.states.forEach(st=>{if(kill.has(st.clip))st.clip=null;});});
+    S.objs.forEach(x=>{if(kill.has(x.mat))x.mat=null;if(x.audio&&kill.has(x.audio.clip))x.audio.clip=null;if(x.anim&&kill.has(x.anim.ctrl))x.anim=null;x.scripts=x.scripts.filter(s=>!kill.has(s.asset));});select(null);}
   commit();}
 // 复制出来的物体叫 "Cube (1)"、"Cube (2)"，和 Unity 6 一样
 function uniqueName(name,pid){const base=name.replace(/\s\(\d+\)$/,'');const sib=S.objs.filter(o=>(o.parent==null?null:o.parent)===(pid==null?null:pid));
@@ -277,7 +285,7 @@ function uniqueName(name,pid){const base=name.replace(/\s\(\d+\)$/,'');const sib
 function insertTree(tree,pid,at){const map=new Map();
   const out=tree.map(x=>{const c=JSON.parse(JSON.stringify(x));map.set(x.id,c.id=nid());return c;});
   out.forEach(c=>{if(map.has(c.parent))c.parent=map.get(c.parent);c.scripts=(c.scripts||[]).map(s=>Object.assign({},s,{seq:nid()}));
-    for(const k of ['rb','cc','agent','navs','audio','vol'])if(c[k])c[k]=Object.assign({},c[k],{seq:nid()});
+    for(const k of ['rb','cc','agent','navs','audio','vol','anim'])if(c[k])c[k]=Object.assign({},c[k],{seq:nid()});
     if(c.prefab&&!S.prefabs[c.prefab])c.prefab=null;if(c.mat&&!asset(c.mat))c.mat=null;});
   out[0].parent=pid==null?null:pid;out[0].name=uniqueName(out[0].name,out[0].parent);
   S.objs.splice(at,0,...out);return out[0];}
@@ -354,8 +362,10 @@ function moveAsset(a,folderId){if(a.id===folderId)return;let c=folderId;while(c)
 function assetPath(a){const p=[];let c=a.parent;while(c){const f=asset(c);if(!f)break;p.unshift(f.name);c=f.parent;}return ['Assets',...p,a.name+'.cs'].join('/');}
 function blankPos(b,vals,tm){const lines=(tm||PM()).lines;for(let i=0;i<lines.length;i++){let col=1;
   for(const seg of lines[i].c){if(typeof seg==='string')col+=seg.length;else if(seg.b===b)return {line:i,col};else col+=String(vals[seg.b]||'').length;}}return {line:-1,col:1};}
-function compileScript(a){const tm=tmplOf(a),vals=a.blanks||{};const r=tm.compile(vals);
-  const errs=r.errors.map(e=>Object.assign({},e,blankPos(e.b,vals,tm)));a.comp={ok:!errs.length,errs,rt:r.rt};}
+function compileOne(a){const tm=tmplOf(a),vals=a.blanks||{};const r=tm.compile(vals);
+  const errs=r.errors.map(e=>e.line!=null?Object.assign({col:1},e):Object.assign({},e,blankPos(e.b,vals,tm)));a.comp={ok:!errs.length,errs,rt:r.rt};}
+// 和 Unity 一样，存一个脚本会让用到它的其他脚本也重新编译（例如 FlashlightPickup 用到 Interactable）
+function compileScript(a){compileOne(a);S.assets.forEach(x=>{if(x!==a&&x.type==='script'&&x.comp&&(tmplOf(x).deps||[]).includes(a.name))compileOne(x);});}
 function compileErrs(){const out=[];for(const a of S.assets){if(a.type!=='script'||!a.comp||a.comp.ok)continue;
   for(const e of a.comp.errs)out.push(Object.assign({},e,{a,text:`${assetPath(a)}(${e.line+1},${e.col}): error ${e.code}: ${e.en}`}));}return out;}
 
@@ -365,7 +375,7 @@ function compileErrs(){const out=[];for(const a of S.assets){if(a.type!=='script
 function inCameraView(o){const c=S.objs.find(q=>q.type==='camera');if(!c)return false;const v=mTV(wRot(c),sub(wPos(o),wPos(c)));if(v[2]<.3)return false;
   const ty=Math.tan(30*Math.PI/180),tx=ty*(CW/CH||16/9);return Math.abs(v[0]/v[2])<tx&&Math.abs(v[1]/v[2])<ty;}
 const vel=new Map();let COLS=[];
-function colList(){return S.objs.filter(q=>q.col&&colBounds(q)).map(q=>{const b=wAABB(q,colBounds(q));return {o:q,trig:q.col.trigger,min:b[0],max:b[1]};});}
+function colList(){return S.objs.filter(q=>q.col&&colBounds(q)&&isActive(q)).map(q=>{const b=wAABB(q,colBounds(q));return {o:q,trig:q.col.trigger,min:b[0],max:b[1]};});}
 const dyn=q=>!!(q.rb||q.cc||q.agent);
 function groundAt(x,z,feet,step,self,r){let g=-Infinity;
   for(const c of COLS){if(c.trig||c.o===self||isAnc(self,c.o))continue;
@@ -377,7 +387,7 @@ function blocked(x,z,feet,head,self,r){
     if(x+r>c.min[0]&&x-r<c.max[0]&&z+r>c.min[2]&&z-r<c.max[2])return true;}return false;}
 function rbPhysics(dt){
   for(const o of S.objs){
-    if(o.parent!=null||!o.rb||!o.rb.useGravity||o.rb.isKinematic||o.cc)continue;
+    if(o.parent!=null||!o.rb||!o.rb.useGravity||o.rb.isKinematic||o.cc||!isActive(o))continue;
     const b=o.col?wAABB(o,colBounds(o)):null,bottom=b?o.pos[1]-b[0][1]:0;
     let v=(vel.get(o.id)||0)-9.81*dt,y=o.pos[1]+v*dt;
     if(b){const r=Math.min(b[1][0]-b[0][0],b[1][2]-b[0][2])/2*.6;const g=groundAt(o.pos[0],o.pos[2],o.pos[1]-bottom,.05,o,r);if(y-bottom<=g){y=g+bottom;v=0;}}
@@ -397,7 +407,7 @@ function ccMove(o,dir,speed,dt){const s=wScale(o),r=.5*Math.max(Math.abs(s[0]),M
   vel.set(o.id,v);const moved=Math.hypot(x-o.pos[0],z-o.pos[2])>1e-5;o.pos=[x,ny,z];if(ny<-3)S.flags.fell=true;return moved;}
 // 触发器：有刚体 / 角色控制器 / 导航代理的物体进出触发器时记一笔
 let trigIn=new Set();
-function triggers(){const bodies=S.objs.filter(o=>o.parent==null&&dyn(o));const now=new Set();
+function triggers(){const bodies=S.objs.filter(o=>o.parent==null&&dyn(o)&&isActive(o));const now=new Set();
   for(const b of bodies){const bb=b.cc?wAABB(b,CC_BOUNDS):b.col?wAABB(b,colBounds(b)):null;if(!bb)continue;
     for(const c of COLS){if(!c.trig||c.o===b||isAnc(b,c.o))continue;
       if(bb[0][0]<c.max[0]&&bb[1][0]>c.min[0]&&bb[0][1]<c.max[1]&&bb[1][1]>c.min[1]&&bb[0][2]<c.max[2]&&bb[1][2]>c.min[2]){const k=c.o.id+':'+b.id;now.add(k);
@@ -470,7 +480,7 @@ function playSource(o,opt){const au=o.audio,a=au&&au.clip!=null?asset(au.clip):n
   const h=ZTG.audio?ZTG.audio.play(a.clip,Object.assign({loop:au.loop,volume:0},opt||{})):null;sounds.set(o.id,{h,name:a.name,t:performance.now(),len:(ZTG.audio.clips[a.clip]||{}).len||1,loop:au.loop,g:0});updateSounds();return true;}
 function stopSounds(){for(const v of sounds.values())if(v.h)v.h.stop();sounds.clear();}
 function updateSounds(){const c=S.objs.find(q=>q.type==='camera');const lp=c?wPos(c):[0,0,0],LR=c?wRot(c):eulerM([0,0,0]);
-  for(const [id,v] of sounds){const o=obj(id);if(!o||!o.audio){if(v.h)v.h.stop();sounds.delete(id);continue;}
+  for(const [id,v] of sounds){const o=obj(id);if(!o||!o.audio||!isActive(o)){if(v.h)v.h.stop();sounds.delete(id);continue;}
     const au=o.audio,b=clamp(au.blend||0,0,1),rel=sub(wPos(o),lp),d=Math.hypot(rel[0],rel[1],rel[2]),mn=Math.max(.01,au.minDist||1);
     const att=d<=mn?1:mn/Math.min(d,Math.max(mn,au.maxDist||500));v.g=clamp(au.volume,0,1)*((1-b)+b*att);
     const side=d>.01?dot(LR[0],rel)/d:0;if(v.h)v.h.set(v.g,side*b);}}
@@ -514,15 +524,66 @@ function trigEnter(tr,body){for(const s of tr.scripts){const a=asset(s.asset),tm
     trigFlash.set(a.id,performance.now()+900);
     if(!TAGS.includes(rt.tag)){onceErr(a,'tag',()=>{const ln=logLineOf(tm,/CompareTag/);logSrc('error','lNoTag',[rt.tag],a,ln);});continue;}
     if(body.tag===rt.tag){const st=agentState.get('door'+tr.id)||{};st.open=true;agentState.set('door'+tr.id,st);}}
+  else if(tm.kind==='jumpscare'){if(body.tag!=='Player')continue;if(agentState.get('js'+tr.id))continue;
+    trigFlash.set(a.id,performance.now()+900);agentState.set('js'+tr.id,{phase:'show',t:0});}
   else if(tm.kind==='exit'){trigFlash.set(a.id,performance.now()+900);if(body.tag!=='Player')continue;const m=s.vals.message!=null?obj(s.vals.message):null;
     if(!m||!m.ui){unassigned(a,tm,'message','noMsg');continue;}m.ui.text='YOU ESCAPED';S.frozen=true;S.flags.escaped=true;log('info','lTimeScale');}}}
+// 互动：从摄像机往前射线，打中的物体（或它的父物体）上有 Interactable 类的脚本，就显示提示；按键就调用它的 Use
+let simStatic={};
+const findInteractable=o=>{let q=o;while(q){const s=q.scripts.find(sc=>{const aa=asset(sc.asset),tt=aa&&LIB()[aa.name];return sc.enabled&&tt&&tt.interactable&&aa.comp&&aa.comp.ok;});if(s)return {o:q,s};q=par(q);}return null;};
+function runInteract(o,s,a,tm){const pr=s.vals.prompt!=null?obj(s.vals.prompt):null;
+  if(!pr||!pr.ui){unassigned(a,tm,'prompt','noPrompt');return false;}pr.ui.text='';
+  let root=o;while(par(root))root=par(root);
+  const from=wPos(o),dir=mMV(wRot(o),[0,0,1]),h=raycastW(from,dir,new Set(subtree(root).map(q=>q.id)));
+  if(!h||h.d>(a.comp.rt.reach||0))return false;const it=findInteractable(h.o);if(!it)return false;
+  pr.ui.text=String(it.s.vals.promptText==null?'':it.s.vals.promptText);S.flags.lookedAt=true;
+  if(!pressedNow.has(a.comp.rt.key))return false;useInteractable(it.o,it.s);return true;}
+function useInteractable(o,s){const a=asset(s.asset),tm=LIB()[a.name];trigFlash.set(a.id,performance.now()+900);
+  if(tm.kind==='pickupLight'){const l=s.vals.flashlight!=null?obj(s.vals.flashlight):null;if(!l||!l.light){unassigned(a,tm,'flashlight','noLight2');return;}
+    l.light.enabled=true;o.active=false;S.flags.torchTaken=true;}
+  else if(tm.kind==='pickupKey'){simStatic.hasKey=true;o.active=false;S.flags.keyTaken=true;}
+  else if(tm.kind==='lockedDoor'){const st=agentState.get('ld'+o.id)||{};agentState.set('ld'+o.id,st);
+    if(!simStatic.hasKey){s.vals.promptText=s.vals.lockedText;S.flags.lockedSeen=true;return;}
+    if(st.opened)return;if(!o.anim){nre(a,tm,'noAnim','whyNoAnim');return;}st.opened=true;s.vals.promptText='';setTrigger(o,'Open',a,tm);S.flags.doorUsed=true;}}
+/* ---------- 动画：动画剪辑（关键帧）+ 动画控制器（状态、参数、过渡） ---------- */
+const animState=new Map();
+const stOf=(c,id)=>c.states.find(x=>x.id===id);
+function clipLen(c){let m=0;for(const k in c.curves)for(const kf of c.curves[k])m=Math.max(m,kf[0]);return m||1;}
+// 两个关键帧之间平滑过渡（和 Unity 默认的曲线一样，开头结尾慢、中间快）
+function sampleCurve(ks,t){if(!ks.length)return null;if(t<=ks[0][0])return ks[0][1];
+  for(let i=1;i<ks.length;i++)if(t<=ks[i][0]){const [t0,a]=ks[i-1],[t1,b]=ks[i],u=(t-t0)/((t1-t0)||1),e=u*u*(3-2*u);return a.map((v,k)=>v+(b[k]-v)*e);}
+  return ks[ks.length-1][1];}
+function applyClip(o,c,t){for(const k of ['pos','rot','scl']){const ks=c.curves[k];if(!ks||!ks.length)continue;const v=sampleCurve(ks,t).map(rnd);if(k==='scl'){o.scale=v;o.scaleOverride=true;}else o[k]=v;}}
+function setTrigger(o,name,a,tm){const c=o.anim?asset(o.anim.ctrl):null;if(!c)return;
+  if(!c.params.some(p=>p.name===name&&p.type==='trigger')){onceErr(a,'p_'+name,()=>logSrc('warn','lNoParam',[name],a,logLineOf(tm,/SetTrigger/)));return;}
+  let st=animState.get(o.id);if(!st){st={state:c.def,t:0,trig:new Set()};animState.set(o.id,st);}st.trig.add(name);}
+// 播放时：先看能不能走过渡（条件都满足；勾了 Has Exit Time 要等到 0.75 的位置），再按当前状态的剪辑摆姿势
+function runAnimators(dt){for(const o of S.objs){if(!o.anim||!isActive(o))continue;const c=asset(o.anim.ctrl);if(!c||c.type!=='animctrl')continue;
+  let st=animState.get(o.id);if(!st){st={state:c.def,t:0,trig:new Set()};animState.set(o.id,st);}
+  const cur=stOf(c,st.state);if(!cur)continue;const cl=cur.clip!=null?asset(cur.clip):null,len=cl?clipLen(cl):1,t0=st.t;st.t+=dt;
+  for(const tr of c.trans.filter(x=>x.from===cur.id)){
+    if(!tr.conds.length&&!tr.exit)continue;
+    if(!tr.conds.every(n=>{const pm=c.params.find(p=>p.name===n);return pm&&pm.type==='trigger'&&st.trig.has(n);}))continue;
+    if(tr.exit){const n0=t0/len,n1=st.t/len,k=Math.floor(n0-.75)+1.75;if(!(n1>=k))continue;}
+    tr.conds.forEach(n=>st.trig.delete(n));st.state=tr.to;st.t=0;break;}
+  const now=stOf(c,st.state),nc=now&&now.clip!=null?asset(now.clip):null;
+  if(nc){const L_=clipLen(nc);applyClip(o,nc,nc.loop?st.t%L_:Math.min(st.t,L_));if(nc.loop&&st.t>L_*1.3)S.flags.animLooped=true;if(now.id!==c.def&&st.t>=L_)S.flags.animDone=true;}}}
+// Jumpscare：协程。走进触发区 → 鬼出现、尖叫、镜头抖 → 等 showTime 秒 → 鬼消失
+function runJumpscare(o,s,a,tm,dt){const st=agentState.get('js'+o.id);if(!st||st.phase!=='show')return false;
+  const g=s.vals.ghost!=null?obj(s.vals.ghost):null,c=s.vals.cam!=null?obj(s.vals.cam):null,L_=s.vals.scareLight!=null?obj(s.vals.scareLight):null;
+  if(st.t===0){if(!g){unassigned(a,tm,'ghost','noGhost');st.phase='done';return false;}if(!c){unassigned(a,tm,'cam','noCamRef');st.phase='done';return false;}
+    g.active=true;if(!o.audio){nre(a,tm,'noAudio','whyNoAudio');}else playSource(o);if(L_&&L_.light)L_.light.enabled=true;st.camStart=c.pos.slice();}
+  st.t+=dt;const k=s.vals.shakeAmount||0;c.pos=st.camStart.map(v=>v+(Math.random()*2-1)*k);
+  if(st.t>=(s.vals.showTime||0)){g.active=false;c.pos=st.camStart.slice();if(L_&&L_.light)L_.light.enabled=false;st.phase='done';S.flags.scared=true;if(L_&&L_.light)S.flags.scaredLit=true;}
+  return true;}
 function runScripts(dt){let moving=false;const ran=new Set();walkedPrev=walkedNow;walkedNow=new Set();playT+=dt;
-  for(const o of S.objs)for(const s of o.scripts){const a=asset(s.asset);const tm=a&&LIB()[a.name];if(!s.enabled||!tm||!a.comp||!a.comp.ok)continue;ran.add(a.id);
+  for(const o of S.objs){if(!isActive(o))continue;for(const s of o.scripts){const a=asset(s.asset);const tm=a&&LIB()[a.name];if(!s.enabled||!tm||!a.comp||!a.comp.ok)continue;ran.add(a.id);
     if(!s.vals)s.vals={speed:5};
     let mv=false;if(tm.kind==='translate')mv=runPlayerMove(o,s,a,dt);else if(tm.kind==='fps')mv=runFPS(o,s,a,tm,dt);else if(tm.kind==='chase')mv=runChase(o,s,a,tm,dt);
     else if(tm.kind==='survival')mv=runSurvival(o,s,a,tm,dt);else if(tm.kind==='daynight')mv=runDayNight(o,s,a,dt);else if(tm.kind==='saveload')mv=runSaveLoad(o,s,a,tm);
     else if(tm.kind==='flicker')mv=runFlicker(o,s,a,tm,dt);else if(tm.kind==='footsteps')mv=runFootsteps(o,s,a,tm,dt);else if(tm.kind==='door')mv=runDoor(o,s,a,tm,dt);else if(tm.kind==='catch')mv=runCatch(o,s,a,tm);
-    if(mv)moving=a.id;}
+    else if(tm.kind==='interact')mv=runInteract(o,s,a,tm);else if(tm.kind==='jumpscare')mv=runJumpscare(o,s,a,tm,dt);
+    if(mv)moving=a.id;}}
   mdx=mdy=0;pressedNow.clear();return {moving,ran};}
 
 /* ---------- Three.js 画面 ---------- */
@@ -564,7 +625,7 @@ function buildModel(o){const pd=PROPS()[o.model],g=new T3.Group();g.matrixAutoUp
   for(const q of pd.parts){const mesh=new T3.Mesh(PGEO[q.g],pmat(q.c,q.e));mesh.matrixAutoUpdate=false;mesh.matrix.copy(tMat(partMat(q)));
     mesh.castShadow=mesh.receiveShadow=true;mesh.userData={id:o.id,main:!!q.main,c:q.c,e:q.e};g.add(mesh);}return g;}
 function sync3(selSet){const seen=new Set();
-  for(const o of S.objs){if(!isRender(o))continue;let m=M3.get(o.id);
+  for(const o of S.objs){if(!isRender(o)||!isActive(o))continue;let m=M3.get(o.id);
     const stale=!m||m.userData.type!==o.type||(isModel(o)&&m.userData.model!==o.model);
     if(stale){if(m)scene3.remove(m);
       if(isModel(o))m=buildModel(o);else{m=new T3.Mesh(GEO[o.type],DEF_MAT);m.matrixAutoUpdate=false;m.receiveShadow=true;m.userData={id:o.id,type:o.type};}
@@ -587,7 +648,7 @@ function sync3(selSet){const seen=new Set();
 let sceneLit=true;const L3=new Map(),POINT_K=12,SPOT_K=45,BLACK=new T3.Color(0);
 const fogExp=new T3.FogExp2(0x808080,.01),fogLin=new T3.Fog(0x808080,0,300);
 function applyLighting(game){const env=S.env,lit=game||sceneLit;
-  const dl=S.objs.find(o=>o.type==='light'&&(!o.light||o.light.kind==='directional'));let elev=.77;
+  const dl=S.objs.find(o=>o.type==='light'&&(!o.light||o.light.kind==='directional')&&isActive(o)&&(!o.light||o.light.enabled!==false));let elev=.77;
   const dir=lit?(dl?mMV(wRot(dl),[0,0,1]):null):mMV(eulerM([50,-30,0]),[0,0,1]);
   sun.visible=!!dir;
   if(dir){sun.target.position.set(0,0,0);sun.position.set(-dir[0]*40,-dir[1]*40,dir[2]*40);sun.target.updateMatrixWorld();if(lit)elev=-dir[1];
@@ -605,7 +666,7 @@ function syncLights(lit){const seen=new Set();
       if(k==='spot'){l.castShadow=true;l.shadow.mapSize.set(1024,1024);l.shadow.bias=-.0004;l.shadow.normalBias=.03;l.shadow.camera.near=.1;l.penumbra=.35;scene3.add(l.target);}
       scene3.add(l);L3.set(o.id,l);}
     const p=wPos(o);l.position.set(p[0],p[1],-p[2]);l.color.set(o.light.color);l.distance=Math.max(.01,o.light.range);
-    l.intensity=lit?Math.max(0,o.light.intensity)*(k==='spot'?SPOT_K:POINT_K):0;
+    l.intensity=lit&&isActive(o)&&o.light.enabled!==false?Math.max(0,o.light.intensity)*(k==='spot'?SPOT_K:POINT_K):0;
     if(k==='spot'){const d=mMV(wRot(o),[0,0,1]);l.target.position.set(p[0]+d[0],p[1]+d[1],-(p[2]+d[2]));l.target.updateMatrixWorld();l.angle=clamp(o.light.angle,1,179)/2*Math.PI/180;}
     seen.add(o.id);}
   for(const [id,l] of L3)if(!seen.has(id)){scene3.remove(l);if(l.target)scene3.remove(l.target);L3.delete(id);}}
@@ -687,7 +748,7 @@ function draw(){
   const ring=(o,cy,r,axis,hot)=>{gctx.strokeStyle=hot?'#d6ff6b':'rgba(130,255,140,.9)';gctx.lineWidth=hot?2.5:1.3;gctx.beginPath();let prev=null;
     for(let k=0;k<=32;k++){const a=k/32*Math.PI*2,c=Math.cos(a)*r,s=Math.sin(a)*r;const lp=axis==='y'?[c,cy,s]:axis==='x'?[0,cy+c,s]:[c,cy+s,0];const q=wPoint(o,lp);if(prev)line(prev,q);prev=q;}gctx.stroke();};
   const trigHot=new Set([...trigIn].map(k=>+k.split(':')[0]));
-  for(const o of S.objs){const show=selSet.has(o.id)||(S.playing&&o.col&&o.col.trigger);if(!show)continue;
+  for(const o of S.objs){const show=selSet.has(o.id)||(S.playing&&o.col&&o.col.trigger&&isActive(o));if(!show)continue;
     if(o.col){const k=o.col.kind,hot=trigHot.has(o.id);
       if(k==='box'||k==='mesh'){const b=colBounds(o);if(b)wire(o,b,hot);}
       else if(k==='sphere'){ring(o,0,.5,'y',hot);ring(o,0,.5,'x',hot);ring(o,0,.5,'z',hot);}
@@ -758,7 +819,7 @@ function drawCompare(){if(!cmp.on)return;const x=CW*cmp.x;gctx.fillStyle='#f0b24
   lab(t('beforeLbl'),x,'r');lab(t('afterLbl'),x,'l');}
 let uiKey='';
 function renderUI(game){const layer=$('#uilayer');const sel=new Set(selIds());
-  const els=S.objs.filter(o=>isUI(o)&&o.ui&&par(o)&&par(o).type==='canvas');
+  const els=S.objs.filter(o=>isUI(o)&&o.ui&&par(o)&&par(o).type==='canvas'&&isActive(o));
   const key=JSON.stringify([CW,CH,game,els.map(o=>[o.id,o.type,o.ui,sel.has(o.id)])]);if(key===uiKey)return;uiKey=key;
   const sf=CW/1920;layer.className=game?'':'preview';
   layer.innerHTML=els.map(o=>{const u=o.ui,[ax,ay]=ANCH[u.anchor]||[.5,.5],w=u.w*sf,h=u.h*sf,cx=ax*CW+u.x*sf,cy=CH-(ay*CH+u.y*sf);
@@ -767,7 +828,7 @@ function renderUI(game){const layer=$('#uilayer');const sel=new Set(selIds());
     if(o.type==='uiimage')return `<div class="uiel${sc}" style="${st}background:${esc(u.color)}"></div>`;
     if(o.type==='uislider')return `<div class="uiel uislider${sc}" style="${st}background:${esc(u.color)}"><i style="width:${clamp(u.value,0,1)*100}%;background:${esc(u.fill)}"></i></div>`;
     return `<div class="uiel uibutton${sc}" style="${st}background:${esc(u.color)};color:${esc(u.tcolor)};font-size:${u.size*sf}px">${esc(u.text)}</div>`;}).join('');}
-function fpsActive(){for(const o of S.objs)for(const s of o.scripts){const a=asset(s.asset);const tm=a&&LIB()[a.name];if(s.enabled&&tm&&tm.kind==='fps'&&a.comp&&a.comp.ok)return o;}return null;}
+function fpsActive(){for(const o of S.objs)if(isActive(o))for(const s of o.scripts){const a=asset(s.asset);const tm=a&&LIB()[a.name];if(s.enabled&&tm&&tm.kind==='fps'&&a.comp&&a.comp.ok)return o;}return null;}
 function rayAt(x,y){if(!LV)return null;const d=mMV(LV.cam.M,norm([(x-CW/2)/LV.f,-(y-CH/2)/LV.f,1]));return {o:LV.cam.pos,d};}
 function axisParam(x,y,P0,A){const r=rayAt(x,y);if(!r)return null;const w0=sub(P0,r.o);const b=dot(A,r.d),d=dot(A,w0),e=dot(r.d,w0);const den=1-b*b;if(Math.abs(den)<1e-4)return null;return (b*e-d)/den;}
 function pickAt(x,y){for(const ic of icons){if(Math.hypot(x-ic.x,y-ic.y)<ic.r)return ic.id;}
@@ -809,10 +870,11 @@ function saveSnaps(){for(let i=0;i<3;i++){try{localStorage.setItem('ztg.snaps',J
 function takeSnap(){draw();const w=480,h=Math.round(480*CH/CW),c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(cv,0,0,w,h);
   snaps.push({n:++snapSeq,img:c.toDataURL('image/jpeg',.82),t:now8()});if(snaps.length>8)snaps.shift();saveSnaps();toast(t('snapTaken',snapSeq));if(floatId==='snaps')openSnaps();}
 let floatId=null;
-function openFloat(id,title,html,bind){floatId=id;const f=$('#float');
-  f.innerHTML=`<div class="win fwin" role="dialog" aria-label="${esc(title)}"><div class="ph cph"><b>${esc(title)}</b><span class="sp"></span><button class="ibtn" id="fclose" aria-label="${t('close')}">✕</button></div><div class="fbody">${html}</div></div>`;
-  f.classList.add('show');$('#fclose').onclick=closeFloat;if(bind)bind(f);}
-function closeFloat(){if(floatId==null)return;floatId=null;const f=$('#float');f.classList.remove('show');f.innerHTML='';}
+function openFloat(id,title,html,bind,opt){if(floatId==='anim'&&id!=='anim')animPreviewEnd();floatId=id;const f=$('#float');f.classList.toggle('bottom',!!(opt&&opt.bottom));
+  f.innerHTML=`<div class="win fwin${opt&&opt.wide?' wide':''}" role="dialog" aria-label="${esc(title)}"><div class="ph cph"><b>${esc(title)}</b><span class="sp"></span><button class="ibtn" id="fclose" aria-label="${t('close')}">✕</button></div><div class="fbody">${html}</div></div>`;
+  // 事件绑在这一次画出来的窗口上（重画时旧窗口和它的事件一起丢掉，不会越积越多）
+  f.classList.add('show');$('#fclose').onclick=closeFloat;if(bind)bind(f.firstElementChild);}
+function closeFloat(){if(floatId==null)return;if(floatId==='anim')animPreviewEnd();floatId=null;const f=$('#float');f.classList.remove('show');f.innerHTML='';}
 let thumbR=null;const thumbs={};
 function propThumb(k){if(thumbs[k])return thumbs[k];
   if(!thumbR){thumbR=new T3.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});thumbR.setSize(120,100,false);thumbR.toneMapping=T3.ACESFilmicToneMapping;}
@@ -845,6 +907,103 @@ function openSettings(){const z=SET.zoom||1;
       else if(b.dataset.snd){soundOn=b.dataset.snd==='1';setSetting('sound',soundOn);if(ZTG.audio)ZTG.audio.setMuted(!soundOn);openSettings();}
       else if(b.hasAttribute('data-upd'))checkUpdates(true);else if(b.hasAttribute('data-open-rel')&&window.ztgApp)ztgApp.openRelease();});
     f.addEventListener('change',e=>{if(e.target.name==='hints'){setSetting('hints',e.target.value);hintT=performance.now();renderGuide();updateHint();}});});}
+/* ---------- 动画窗口（Window → Animation → Animation）：录制关键帧 ---------- */
+const animWin={obj:null,clip:null,time:0,rec:false,base:null,orig:null};let animBusy=false;
+const trOf=o=>({pos:o.pos.slice(),rot:o.rot.slice(),scl:effScale(o).slice()});
+function setKey(ks,tt,v){tt=Math.round(tt*100)/100;const i=ks.findIndex(k=>Math.abs(k[0]-tt)<.005);if(i>=0)ks[i][1]=v.map(rnd);else{ks.push([tt,v.map(rnd)]);ks.sort((x,y)=>x[0]-y[0]);}}
+function animCtx(){const o=selObj()||(animWin.obj!=null?obj(animWin.obj):null);if(!o)return {};const c=o.anim?asset(o.anim.ctrl):null;
+  const clips=c?c.states.map(x=>x.clip!=null?asset(x.clip):null).filter(Boolean):[];let clip=animWin.clip!=null?clips.find(x=>x.id===animWin.clip):null;if(!clip)clip=clips[0]||null;return {o,c,clip,clips};}
+// 录制中：在检查器或场景里改了位置 / 旋转 / 缩放，就在播放头的时间点记一个关键帧（第一次还会在 0 秒记下原来的值）
+function animRecordHook(){if(!animWin.rec||floatId!=='anim')return;const {o,clip}=animCtx();if(!o||!clip||o.id!==animWin.obj||!animWin.base)return;
+  const now=trOf(o);for(const k of ['pos','rot','scl']){if(near(now[k],animWin.base[k],1e-4))continue;const ks=clip.curves[k]||(clip.curves[k]=[]);
+    if(!ks.length&&animWin.time>0)setKey(ks,0,animWin.base[k]);setKey(ks,animWin.time,now[k]);S.flags.keyed=true;}animWin.base=now;}
+function animPreview(){const {o,clip}=animCtx();if(!o||!clip)return;if(!animWin.orig||animWin.orig.id!==o.id)animWin.orig=Object.assign({id:o.id},trOf(o));applyClip(o,clip,animWin.time);animWin.base=trOf(o);}
+function animPreviewEnd(){const o=animWin.orig?obj(animWin.orig.id):null;if(o){o.pos=animWin.orig.pos;o.rot=animWin.orig.rot;}animWin.orig=null;animWin.rec=false;}
+function openAnimWin(refresh){if(refresh&&floatId!=='anim')return;const {o,c,clip,clips}=animCtx();
+  if(o&&animWin.obj!==o.id){if(animWin.orig)animPreviewEnd();animWin.obj=o.id;animWin.time=0;animWin.rec=false;}
+  if(clip)animWin.clip=clip.id;
+  const span=Math.max(2,clip?Math.ceil(clipLen(clip)+.5):2),W=560,px=W/span;
+  let html;
+  if(!o)html=`<p class="fnote">${esc(t('awSelect'))}</p>`;
+  else if(!clip)html=`<p>${t('awCreateIntro',esc(o.name))}</p><div class="awcreate"><input class="hexin" id="awname" value="New Animation" maxlength="40" aria-label="${t('animClip')}"><button class="btn primary" data-aw="create">${t('awCreate')}</button></div><p class="fnote">${esc(t('awCreateNote'))}</p>`;
+  else{const rows=['pos','rot','scl'].filter(k=>clip.curves[k]);const cur=trOf(o);
+    html=`<div class="awbar"><button class="btn awrec${animWin.rec?' on':''}" data-aw="rec" aria-pressed="${animWin.rec}">● ${t('awRecord')}</button>${clips.length>1?`<select class="schemesel" data-aw="clip">${clips.map(x=>`<option value="${x.id}"${x.id===clip.id?' selected':''}>${esc(x.name)}</option>`).join('')}</select>`:`<b>${esc(clip.name)}</b>`}
+      <span class="sp"></span><label class="awt">${t('awTime')} <input class="hexin" data-aw="time" value="${fmt(animWin.time)}" aria-label="${t('awTime')}"> s</label><button class="btn quiet" data-aw="addprop" data-plus="1">${t('awAddProp')}</button></div>
+    <div class="awgrid${animWin.rec?' rec':''}"><div class="awlab"><div class="awhead"></div>${rows.map(k=>`<div class="awrow">${esc(o.name)} : ${t('aw_'+k)} <span class="awv">(${cur[k].map(fmt).join(', ')})</span></div>`).join('')||`<div class="awrow fnote">${esc(t('awNoProp'))}</div>`}</div>
+    <div class="awtl" style="width:${W}px"><div class="awhead" data-aw="ruler">${Array.from({length:span*2+1},(_,i)=>`<span style="left:${i*px/2}px">${i%2?'':i/2+'s'}</span>`).join('')}</div>
+    ${rows.map(k=>`<div class="awrow">${clip.curves[k].map(kf=>`<i class="kf" data-aw="key" data-t="${kf[0]}" style="left:${kf[0]*px}px" title="${fmt(kf[0])} s"></i>`).join('')}</div>`).join('')}
+    <div class="awhead2" data-aw="ruler2"></div><div class="awph" style="left:${animWin.time*px}px"></div></div></div>
+    <p class="fnote">${esc(t(animWin.rec?'awRecNote':'awNote'))}</p>`;}
+  openFloat('anim',t('animWinM'),html,f=>{
+    f.addEventListener('click',e=>{const b=e.target.closest('[data-aw]');if(!b)return;const k=b.dataset.aw;
+      if(k==='create'){const nm=($('#awname').value||'New Animation').trim().replace(/[\/\\]/g,'')||'New Animation';animCreate(o,nm);}
+      else if(k==='rec'){animWin.rec=!animWin.rec;if(animWin.rec){animPreview();S.flags.recorded=true;}else S.flags.recStopped=true;openAnimWin(true);}
+      else if(k==='key'){animWin.time=+b.dataset.t;animPreview();commit();}
+      else if(k==='ruler'||k==='ruler2'){const r=b.getBoundingClientRect();animWin.time=Math.round(clamp((e.clientX-r.left)/px,0,span)*20)/20;animPreview();commit();}
+      else if(k==='addprop'){const r=b.getBoundingClientRect();openMenu([{tk:'transform',k:'awtr',children:['pos','rot','scl'].map(pk=>({tk:'aw_'+pk,k:'aw_'+pk,dis:!!(clip&&clip.curves[pk]),fn:()=>{const v=trOf(o)[pk];clip.curves[pk]=[[0,v.slice()],[1,v.slice()]];commit();}}))}],r.left,r.bottom+2);}});
+    f.addEventListener('change',e=>{const k=e.target.dataset.aw;if(k==='time'){const v=parseFloat(String(e.target.value).replace(',','.'));if(!isNaN(v)){animWin.time=clamp(v,0,60);animPreview();commit();}}
+      else if(k==='clip'){animWin.clip=+e.target.value;openAnimWin(true);}});
+    f.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset.aw==='time')e.target.blur();if(e.key==='Enter'&&e.target.id==='awname')$('#float [data-aw="create"]').click();});},{bottom:true,wide:true});}
+// 点「创建」：存一个新剪辑，Unity 会顺便建一个以物体命名的动画控制器，并给物体加上 Animator 组件
+function animCreate(o,nm){const clip=mkAsset('anim',uniqueAssetName(nm,0),0,{loop:true,curves:{}});
+  let c=o.anim?asset(o.anim.ctrl):null;if(!c){c=mkAsset('animctrl',uniqueAssetName(o.name,0),0,{states:[],def:null,params:[],trans:[]});o.anim={ctrl:c.id,seq:nid()};}
+  const sid=nid();c.states.push({id:sid,name:clip.name,clip:clip.id,x:230+c.states.length*40,y:40+c.states.length*70});if(c.def==null)c.def=sid;
+  animWin.clip=clip.id;animWin.time=0;log('info','lAnimCreated',clip.name,c.name);commit();}
+
+/* ---------- Animator 窗口（Window → Animation → Animator）：状态、参数、过渡 ---------- */
+const animrWin={ctrl:null,sel:null,link:null};
+function animrCtrl(){const o=selObj();if(o&&o.anim){const c=asset(o.anim.ctrl);if(c){animrWin.ctrl=c.id;return c;}}const a=selAsset();if(a&&a.type==='animctrl'){animrWin.ctrl=a.id;return a;}
+  const c=animrWin.ctrl!=null?asset(animrWin.ctrl):null;return c&&c.type==='animctrl'?c:null;}
+const PTYPES=['float','int','bool','trigger'];
+function openAnimator(refresh){if(refresh&&floatId!=='animator')return;const c=animrCtrl();let html;
+  if(!c)html=`<p class="fnote">${esc(t('arNoCtrl'))}</p>`;
+  else{const S_=animrWin.sel,selSt=S_&&S_.k==='st'?stOf(c,S_.id):null,selTr=S_&&S_.k==='tr'?c.trans.find(x=>x.id===S_.id):null;
+    const ctr=st=>[st.x+70,st.y+18],EN=[60,18+150],entryXY=[20,150];
+    const line=(a,b,cls,id,off)=>{const dx=b[0]-a[0],dy=b[1]-a[1],l=Math.hypot(dx,dy)||1,nx=-dy/l*(off||0),ny=dx/l*(off||0),x1=a[0]+nx,y1=a[1]+ny,x2=b[0]+nx,y2=b[1]+ny,mx=(x1+x2)/2,my=(y1+y2)/2,ang=Math.atan2(dy,dx);
+      return `<g class="${cls}"${id?` data-ar="tr" data-id="${id}"`:''}><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/><line class="hit" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/><path d="M${mx+8*Math.cos(ang)},${my+8*Math.sin(ang)} L${mx-6*Math.cos(ang)+5*Math.sin(ang)},${my-6*Math.sin(ang)-5*Math.cos(ang)} L${mx-6*Math.cos(ang)-5*Math.sin(ang)},${my-6*Math.sin(ang)+5*Math.cos(ang)}z"/></g>`;};
+    const def=stOf(c,c.def);
+    html=`<div class="animr"><div class="aparams"><div class="aph"><b>${t('arParams')}</b><span class="sp"></span><button class="btn small" data-ar="addparam" data-plus="1" aria-label="${t('arAddParam')}">+</button></div>
+      ${c.params.map((p,i)=>`<div class="aprow"><input class="hexin" data-ar="pname" data-i="${i}" value="${esc(p.name)}" aria-label="${t('arParams')}"><span class="ptype">${t('p_'+p.type)}</span><button class="ibtn rm" data-ar="rmparam" data-i="${i}" aria-label="✕">✕</button></div>`).join('')||`<p class="fnote">${esc(t('arNoParam'))}</p>`}</div>
+      <div class="agraph" data-ar="graph"><svg class="alines" width="100%" height="100%">${def?line([entryXY[0]+70,entryXY[1]+18],ctr(def),'entry'):''}
+        ${c.trans.map(tr=>{const a=stOf(c,tr.from),b=stOf(c,tr.to);if(!a||!b)return '';const back=c.trans.some(x=>x.from===tr.to&&x.to===tr.from);return line(ctr(a),ctr(b),'tr'+(selTr===tr?' sel':''),tr.id,back?7:0);}).join('')}
+        ${animrWin.link!=null&&stOf(c,animrWin.link)?`<line class="linking" x1="${ctr(stOf(c,animrWin.link))[0]}" y1="${ctr(stOf(c,animrWin.link))[1]}" x2="${ctr(stOf(c,animrWin.link))[0]}" y2="${ctr(stOf(c,animrWin.link))[1]}"/>`:''}</svg>
+        <div class="anode entry" style="left:${entryXY[0]}px;top:${entryXY[1]}px">Entry</div>
+        ${c.states.map(st=>`<div class="anode st${st.id===c.def?' def':''}${selSt===st?' sel':''}" data-ar="st" data-id="${st.id}" style="left:${st.x}px;top:${st.y}px">${esc(st.name)}</div>`).join('')}
+        ${animrWin.link!=null?`<div class="alinkhint">${esc(t('arLinkHint'))}</div>`:''}</div></div>
+      <div class="ainsp">${selSt?`<b>${t('arState')}</b><div class="vrow"><label>${t('arName')}</label><input class="hexin" data-ar="sname" value="${esc(selSt.name)}" aria-label="${t('arName')}"></div>
+        <div class="vrow"><label>${t('arMotion')}</label><select class="schemesel" data-ar="smotion" aria-label="${t('arMotion')}"><option value="">${t('arNone')}</option>${S.assets.filter(x=>x.type==='anim').map(x=>`<option value="${x.id}"${x.id===selSt.clip?' selected':''}>${esc(x.name)}</option>`).join('')}</select></div>`
+      :selTr?`<b>${esc((stOf(c,selTr.from)||{}).name)} → ${esc((stOf(c,selTr.to)||{}).name)}</b>${ck('arHasExit','',selTr.exit).replace('<input type="checkbox"','<input type="checkbox" data-ar="exit"')}
+        <div class="subh">${t('arConds')}</div>${selTr.conds.map((cn,i)=>`<div class="aprow"><select class="schemesel" data-ar="cond" data-i="${i}" aria-label="${t('arConds')}">${c.params.map(p=>`<option${p.name===cn?' selected':''}>${esc(p.name)}</option>`).join('')}${c.params.some(p=>p.name===cn)?'':`<option selected>${esc(cn)}</option>`}</select><button class="ibtn rm" data-ar="rmcond" data-i="${i}" aria-label="✕">✕</button></div>`).join('')||`<p class="fnote">${esc(t('arNoCond'))}</p>`}
+        <button class="btn small" data-ar="addcond"${c.params.length?'':' disabled'}>+ ${t('arAddCond')}</button>`
+      :`<p class="fnote">${esc(t('arTip'))}</p>`}</div>`;}
+  openFloat('animator',t('animatorWinM')+(c?' — '+c.name:''),html,f=>{if(!c)return;const g=$('.agraph',f);
+    let drag=null;
+    g.addEventListener('pointerdown',e=>{const n=e.target.closest('[data-ar="st"]');const tr=e.target.closest('[data-ar="tr"]');if(e.button!==0)return;
+      if(n){const st=stOf(c,+n.dataset.id);if(animrWin.link!=null){if(st.id!==animrWin.link&&!c.trans.some(x=>x.from===animrWin.link&&x.to===st.id)){const tr2={id:nid(),from:animrWin.link,to:st.id,exit:true,conds:[]};c.trans.push(tr2);animrWin.sel={k:'tr',id:tr2.id};}animrWin.link=null;commit();return;}
+        animrWin.sel={k:'st',id:st.id};drag={st,x:e.clientX,y:e.clientY,ox:st.x,oy:st.y,moved:false};try{n.setPointerCapture(e.pointerId);}catch(err){}animBusy=true;$$('.anode.sel',g).forEach(x=>x.classList.remove('sel'));n.classList.add('sel');return;}
+      if(tr){animrWin.sel={k:'tr',id:+tr.dataset.id};animrWin.link=null;commit();return;}
+      if(animrWin.link!=null){animrWin.link=null;openAnimator(true);return;}if(animrWin.sel){animrWin.sel=null;openAnimator(true);}});
+    g.addEventListener('pointermove',e=>{if(animrWin.link!=null){const ln=$('.linking',g);if(ln){const r=g.getBoundingClientRect();ln.setAttribute('x2',e.clientX-r.left);ln.setAttribute('y2',e.clientY-r.top);}}
+      if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>3)drag.moved=true;drag.st.x=clamp(drag.ox+dx,0,520);drag.st.y=clamp(drag.oy+dy,0,230);const n=$(`.anode[data-id="${drag.st.id}"]`,g);if(n){n.style.left=drag.st.x+'px';n.style.top=drag.st.y+'px';}});
+    g.addEventListener('pointerup',()=>{if(!drag)return;drag=null;animBusy=false;commit();});
+    g.addEventListener('contextmenu',e=>{e.preventDefault();const n=e.target.closest('[data-ar="st"]');const r=g.getBoundingClientRect();
+      if(n){const st=stOf(c,+n.dataset.id);animrWin.sel={k:'st',id:st.id};
+        openMenu([{tk:'arMakeTrans',k:'maketrans',fn:()=>{animrWin.link=st.id;openAnimator(true);}},{tk:'arSetDefault',k:'setdefault',fn:()=>{c.def=st.id;commit();}},
+          {tk:'del',k:'delstate',fn:()=>{c.states=c.states.filter(x=>x!==st);c.trans=c.trans.filter(x=>x.from!==st.id&&x.to!==st.id);if(c.def===st.id)c.def=c.states[0]?c.states[0].id:null;animrWin.sel=null;commit();}}],e.clientX,e.clientY);}
+      else{const x=e.clientX-r.left,y=e.clientY-r.top;openMenu([{tk:'arCreateState',k:'createstate',children:[{tk:'arEmpty',k:'emptystate',fn:()=>{const st={id:nid(),name:uniqueState(c,'New State'),clip:null,x:clamp(x-70,0,520),y:clamp(y-18,0,230)};c.states.push(st);if(c.def==null)c.def=st.id;animrWin.sel={k:'st',id:st.id};commit();}}]}],e.clientX,e.clientY);}});
+    f.addEventListener('click',e=>{const b=e.target.closest('[data-ar]');if(!b)return;const k=b.dataset.ar;
+      if(k==='addparam'){const r=b.getBoundingClientRect();openMenu(PTYPES.map(pt=>({tk:'p_'+pt,k:'param_'+pt,fn:()=>{c.params.push({name:uniqueParam(c,'New '+{float:'Float',int:'Int',bool:'Bool',trigger:'Trigger'}[pt]),type:pt});commit();}})),r.left,r.bottom+2);}
+      else if(k==='rmparam'){c.params.splice(+b.dataset.i,1);commit();}
+      else if(k==='addcond'){const tr=c.trans.find(x=>animrWin.sel&&x.id===animrWin.sel.id);if(tr&&c.params.length){tr.conds.push(c.params[0].name);commit();}}
+      else if(k==='rmcond'){const tr=c.trans.find(x=>animrWin.sel&&x.id===animrWin.sel.id);if(tr){tr.conds.splice(+b.dataset.i,1);commit();}}});
+    f.addEventListener('change',e=>{const el=e.target,k=el.dataset.ar;if(!k)return;const tr=c.trans.find(x=>animrWin.sel&&animrWin.sel.k==='tr'&&x.id===animrWin.sel.id),st=animrWin.sel&&animrWin.sel.k==='st'?stOf(c,animrWin.sel.id):null;
+      if(k==='pname'){const p=c.params[+el.dataset.i];const old=p.name,nv=el.value.trim()||old;c.trans.forEach(x=>{x.conds=x.conds.map(n=>n===old?nv:n);});p.name=nv;}
+      else if(k==='exit'&&tr)tr.exit=el.checked;else if(k==='cond'&&tr)tr.conds[+el.dataset.i]=el.value;
+      else if(k==='sname'&&st)st.name=el.value.trim()||st.name;else if(k==='smotion'&&st)st.clip=el.value?+el.value:null;commit();});
+    f.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT')e.target.blur();if(e.key==='Escape'&&animrWin.link!=null){animrWin.link=null;openAnimator(true);e.stopPropagation();}});},{bottom:true,wide:true});}
+const uniqueState=(c,n)=>{let k=n,i=0;while(c.states.some(x=>x.name===k))k=n+' '+(++i);return k;};
+const uniqueParam=(c,n)=>{let k=n,i=0;while(c.params.some(x=>x.name===k))k=n+' '+(++i);return k;};
+
 // 灯光窗口（Window → Rendering → Lighting）：环境（天空盒、环境光）和雾
 const ENVPAL=['#000000','#0b0c10','#1a1c22','#363636','#808080','#2a1a1a','#1a2433','#c9d6e8'];
 function openLighting(){const e=S.env;
@@ -880,7 +1039,7 @@ async function checkUpdates(manual){const show=h=>{const el=$('#updres');if(el)e
   }catch(e){if(manual)show(esc(t('updateErr')));}}
 $('#updbanner').addEventListener('click',()=>{if(window.ztgApp)ztgApp.openRelease();});
 $('#setbtn').addEventListener('click',openSettings);$('#helpbtn').addEventListener('click',openShortcuts);
-const FLOATS={lighting:openLighting,lib:openLibrary,snaps:openSnaps,prefs:openPrefs,settings:openSettings,shortcuts:openShortcuts};
+const FLOATS={anim:openAnimWin,animator:openAnimator,lighting:openLighting,lib:openLibrary,snaps:openSnaps,prefs:openPrefs,settings:openSettings,shortcuts:openShortcuts};
 
 /* ---------- 导出到真 Unity：把脚本和一份「怎么做」清单打成 zip ---------- */
 function crc32(b){let crc=-1;for(let i=0;i<b.length;i++){let c=(crc^b[i])&255;for(let k=0;k<8;k++)c=c&1?(c>>>1)^0xEDB88320:c>>>1;crc=(crc>>>8)^c;}return (crc^-1)>>>0;}
@@ -902,6 +1061,12 @@ function exportGuide(l){const zh=l==='zh',v3=v=>`(${v.map(fmt).join(', ')})`,out
     out.push(`- Environment Lighting Source: ${e.src==='color'?'Color, Ambient Color '+e.amb:'Skybox, Intensity Multiplier '+fmt(e.mul)}`);
     if(e.fog)out.push(`- Other Settings → Fog ✓, Color ${e.fogColor}, Mode ${{linear:'Linear',exp:'Exponential',exp2:'Exponential Squared'}[e.fogMode]}, ${e.fogMode==='linear'?`Start ${fmt(e.start)}, End ${fmt(e.end)}`:`Density ${fmt(e.density)}`}`);
     out.push('');}
+  const ac=S.assets.filter(a=>a.type==='anim'||a.type==='animctrl');
+  if(ac.length){out.push(zh?'## 动画（Window → Animation → Animation / Animator）\n':'## Animation (Window → Animation → Animation / Animator)\n');
+    ac.filter(a=>a.type==='anim').forEach(a=>{out.push(`- ${zh?'动画剪辑':'Animation Clip'} **${a.name}**: Loop Time ${a.loop?'✓':'✗'}`);for(const k in a.curves)out.push(`  - ${ZTG.tl('en','aw_'+k)}: ${a.curves[k].map(kf=>`${fmt(kf[0])}s → ${v3(kf[1])}`).join(', ')}`);});
+    ac.filter(a=>a.type==='animctrl').forEach(c=>{out.push(`- ${zh?'动画控制器':'Animator Controller'} **${c.name}**: ${zh?'状态':'states'} ${c.states.map(x=>x.name+(x.id===c.def?(zh?'（默认）':' (default)'):'')).join(', ')}; ${zh?'参数':'parameters'} ${c.params.map(p=>p.name+' ('+p.type+')').join(', ')||'—'}`);
+      c.trans.forEach(tr=>out.push(`  - ${(stOf(c,tr.from)||{}).name} → ${(stOf(c,tr.to)||{}).name}: Has Exit Time ${tr.exit?'✓':'✗'}, ${zh?'条件':'conditions'} ${tr.conds.join(', ')||'—'}`));});
+    out.push('');}
   const au=S.assets.filter(a=>a.type==='audio');
   if(au.length){out.push(zh?'## 声音\n':'## Sounds\n');au.forEach(a=>out.push(`- **${a.name}**: ${zh?'模拟器用代码合成的声音。真 Unity 里换成你自己的音频文件（例如免费的 CC0 音效），拖进项目窗口就行。':'made by the simulator in code. In real Unity, use your own audio file (for example a free CC0 sound) and drag it into the Project window.'}`));out.push('');}
   out.push(zh?'## 物体（按层级顺序）\n':'## Objects (in Hierarchy order)\n');
@@ -915,6 +1080,8 @@ function exportGuide(l){const zh=l==='zh',v3=v=>`(${v.map(fmt).join(', ')})`,out
   const walk=(o,d)=>{const ind='  '.repeat(d),m=matOf(o);out.push(`${ind}- **${o.name}** — ${how(o)}${par(o)?(zh?`，放在 ${par(o).name} 下面`:`, as a child of ${par(o).name}`):''}`);
     if(!isUI(o))out.push(`${ind}  - Position ${v3(o.pos)}, Rotation ${v3(o.rot)}, Scale ${v3(effScale(o))}`);
     if(m)out.push(`${ind}  - ${zh?'材质':'Material'}: ${m.name}`);
+    if(o.active===false)out.push(`${ind}  - ${zh?'取消勾选名字旁边的勾（开始时隐藏）':'Uncheck the box next to its name (hidden at start)'}`);
+    if(o.light&&o.light.enabled===false)out.push(`${ind}  - ${zh?'取消勾选 Light 组件（开始时不亮）':'Uncheck the Light component (off at start)'}`);
     if(o.tag&&o.tag!=='Untagged'&&o.type!=='camera')out.push(`${ind}  - Tag: ${o.tag}`);
     if(MESH_COL[o.type]&&!o.col)out.push(`${ind}  - ${zh?'移除碰撞体':'Remove the collider'}`);if(o.col&&o.col.trigger)out.push(`${ind}  - ${zh?'碰撞体勾选 Is Trigger':'Collider: check Is Trigger'}`);
     if(o.rb)out.push(`${ind}  - ${zh?'添加组件 → 物理 → 刚体':'Add Component → Physics → Rigidbody'}`);
@@ -924,6 +1091,7 @@ function exportGuide(l){const zh=l==='zh',v3=v=>`(${v.map(fmt).join(', ')})`,out
     if(o.cam&&o.cam.post)out.push(`${ind}  - ${zh?'摄像机 → Rendering → 勾选 Post Processing':'Camera → Rendering → check Post Processing'}`);
     if(o.audio){const au=o.audio,cl=au.clip!=null?asset(au.clip):null;out.push(`${ind}  - ${zh?'添加组件 → 音频 → 音频源':'Add Component → Audio → Audio Source'}: ${cl?cl.name:'None'}, Play On Awake ${au.awake?'✓':'✗'}, Loop ${au.loop?'✓':'✗'}, Volume ${fmt(au.volume)}, Spatial Blend ${fmt(au.blend)}, Min/Max Distance ${fmt(au.minDist)}/${fmt(au.maxDist)}`);}
     if(o.vol){const v=o.vol;out.push(`${ind}  - ${zh?'Volume 组件：Profile 点 New，再 Add Override → Post-processing → ':'Volume: click New for the Profile, then Add Override → Post-processing → '}${Object.keys(v.ov).map(k=>`${ZTG.tl('en',OVK[k])} (${OV[k].map(([pp])=>`${ZTG.tl('en','ov_'+pp)} ${fmt(v.ov[k][pp])}`).join(', ')})`).join('; ')||'—'}`);}
+    if(o.anim)out.push(`${ind}  - Animator: Controller ${(asset(o.anim.ctrl)||{}).name||'None'}`);
     if(o.navs)out.push(`${ind}  - ${zh?'添加组件 → NavMesh Surface，点 Bake（需要 AI Navigation 包）':'Add Component → NavMesh Surface, click Bake (needs the AI Navigation package)'}`);
     o.scripts.forEach(sc=>{const a=asset(sc.asset);if(!a)return;const vals=Object.entries(sc.vals||{}).map(([k,v])=>`${k} = ${Array.isArray(v)?v.map(id=>(asset(id)||{}).name).join(', '):typeof v==='number'?fmt(v):v!=null&&obj(v)?obj(v).name:'None'}`).join('; ');
       out.push(`${ind}  - ${zh?'把脚本拖上去':'Drag the script onto it'}: ${a.name}${vals?` (${vals})`:''}`);});
@@ -1013,7 +1181,8 @@ Object.assign(ZTG,{WORDER,WSEL,mkObj,mkAsset,select,P,FL,near,effScale,matOf,mat
   codeOpen:()=>codeId,codeDraft:b=>{const el=$(`#modal .blank[data-b="${b}"]`);return el?el.value:'';},codeDirty:()=>codeIsDirty(),hint:HINT});
 
 let CHAP=ZTG.chapters.ch0,STEPS=CHAP.steps;
-function setChap(){CHAP=ZTG.chapters['ch'+chapNum()]||ZTG.chapters.ch0;STEPS=CHAP.steps;}
+function setChap(){CHAP=ZTG.chapters['ch'+chapKey()]||ZTG.chapters.ch0;STEPS=CHAP.steps;}
+const chapLabel=()=>CHAP.label?L(CHAP.label):t('chN',+chapKey());
 // 教练给的蓝图框（例如第 1 章要放墙的位置）
 function lessonGhosts(){if(!isLesson()||!S||S.playing||S.tab!=='scene'||S.step>=STEPS.length||!STEPS[S.step].ghosts)return [];try{return STEPS[S.step].ghosts()||[];}catch(e){return [];}}
 
@@ -1028,10 +1197,10 @@ function freeGuide(){return `<div class="gbody"><div class="gstep">${t('freeTitl
 const bugRes=()=>CHAP.bugs.list.map(b=>{try{return !!b.check();}catch(e){return false;}});
 const bugSig=()=>'bugs|'+bugRes().join('')+'|'+[...bugHintOpen].join(',');
 function bugsGuide(){const B=CHAP.bugs.list,res=bugRes(),all=res.every(Boolean);
-  return `<div class="gbody"><div class="gstep">${t('chN',chapNum())}</div><h2>${t('bugsTitle')}</h2><p>${esc(t('bugsIntro'))}</p><ul class="conds">${B.map((b,i)=>`<li class="${res[i]?'done':''}"><span class="chk"></span><span>${esc(L(b.title))}${!res[i]?(bugHintOpen.has(i)?`<div class="hint" style="margin-top:4px">${esc(L(b.hint))}</div>`:` <button class="btn quiet small" data-act="bughint" data-i="${i}">${t('bugHint')}</button>`):''}</span></li>`).join('')}</ul>
+  return `<div class="gbody"><div class="gstep">${chapLabel()}</div><h2>${t('bugsTitle')}</h2><p>${esc(t('bugsIntro'))}</p><ul class="conds">${B.map((b,i)=>`<li class="${res[i]?'done':''}"><span class="chk"></span><span>${esc(L(b.title))}${!res[i]?(bugHintOpen.has(i)?`<div class="hint" style="margin-top:4px">${esc(L(b.hint))}</div>`:` <button class="btn quiet small" data-act="bughint" data-i="${i}">${t('bugHint')}</button>`):''}</span></li>`).join('')}</ul>
   ${all?`<div class="winmsg">${esc(t('bugsDone'))}</div><div class="gact"><button class="btn primary" data-act="reset">${t('bugsAgain')}</button><button class="btn quiet" data-act="home">${t('backHome')}</button></div>`:''}</div>`;}
 function quizHTML(){const Q=CHAP.quiz,n=Q.length;
-  if(quiz.i>=n){const qk='ztg.ch'+chapNum()+'.quiz',best=Math.max(quiz.score,+(lsGet(qk)||0));lsSet(qk,String(best));
+  if(quiz.i>=n){const qk='ztg.ch'+chapKey()+'.quiz',best=Math.max(quiz.score,+(lsGet(qk)||0));lsSet(qk,String(best));
     return `<div class="gstep">${t('quizBtn')}</div><h2>${esc(t('quizResult',quiz.score,n))}</h2><p>${esc(t('quizBest',best))}</p><div class="gact"><button class="btn primary" data-act="qagain">${t('quizAgain')}</button><button class="btn quiet" data-act="home">${t('backHome')}</button></div>`;}
   const q=Q[quiz.i],pk=quiz.picked;
   return `<div class="gstep">${t('quizQ',quiz.i+1,n)}</div><h2>${esc(L(q.q))}</h2><div class="qopts">${q.o.map((o,k)=>`<button class="qopt${pk==null?'':k===q.a?' right':k===pk?' wrongp':''}" data-act="qa" data-k="${k}"${pk!=null?' disabled':''}>${esc(L(o))}</button>`).join('')}</div>
@@ -1104,11 +1273,12 @@ const RM=matchMedia('(prefers-reduced-motion: reduce)');
 function resolvePt(x){
   if(x==null)return null;
   if(typeof x==='object'&&'x' in x)return x;
-  for(const el of $$(x)){const r=el.getBoundingClientRect();
-    if(r.width<1||r.height<1||r.bottom<0||r.right<0||r.top>innerHeight||r.left>innerWidth)continue;
-    // 在可以滚动的面板里、被挡住了：先滚过去（例如层级很长时，Player 在最下面）
-    const box=el.closest('.pb,.code');if(box){let q=box.getBoundingClientRect();if(r.bottom<q.top+2||r.top>q.bottom-2){const sc=el.closest('#hier-body,#insp-body,#proj-body');if(!sc)continue;
-      el.scrollIntoView({block:'nearest'});const r2=el.getBoundingClientRect();q=box.getBoundingClientRect();if(r2.bottom<q.top+2||r2.top>q.bottom-2)continue;return {x:r2.left+r2.width/2,y:r2.top+r2.height/2,r:r2,el};}}
+  for(const el of $$(x)){let r=el.getBoundingClientRect();if(r.width<1||r.height<1)continue;
+    // 在可以滚动的面板里、被挡住了：先滚过去（例如层级很长时，要找的物体在最下面）
+    const sc=el.closest('#hier-body,#insp-body,#proj-body');
+    if(sc){const q=sc.getBoundingClientRect();if(r.bottom<q.top+2||r.top>q.bottom-2){el.scrollIntoView({block:'nearest'});r=el.getBoundingClientRect();}}
+    if(r.bottom<0||r.right<0||r.top>innerHeight||r.left>innerWidth)continue;
+    const box=el.closest('.pb,.code');if(box){const q=box.getBoundingClientRect();if(r.bottom<q.top+2||r.top>q.bottom-2)continue;}
     return {x:r.left+r.width/2,y:r.top+r.height/2,r,el};}
   return null;}
 function pickHint(){
@@ -1173,7 +1343,7 @@ function renderChrome(){
 function renderHier(){
   const ids=new Set(selIds()),rows=[];
   const walk=(o,d)=>{const ks=kids(o),col=S.collapsed.includes(o.id);
-    rows.push(`<div class="hrow${ids.has(o.id)?' sel':''}${o.prefab?' pf':''}" style="padding-left:${10+(d-1)*14}px" data-obj="${o.id}" data-drag="obj:${o.id}" data-drop="obj:${o.id}"><span class="tw" ${ks.length?`data-tw="${o.id}"`:''}>${ks.length?(col?'▸':'▾'):''}</span>${objIcon(o)}<span>${esc(o.name)}</span></div>`);
+    rows.push(`<div class="hrow${ids.has(o.id)?' sel':''}${o.prefab?' pf':''}${isActive(o)?'':' off'}" style="padding-left:${10+(d-1)*14}px" data-obj="${o.id}" data-drag="obj:${o.id}" data-drop="obj:${o.id}"><span class="tw" ${ks.length?`data-tw="${o.id}"`:''}>${ks.length?(col?'▸':'▾'):''}</span>${objIcon(o)}<span>${esc(o.name)}</span></div>`);
     if(!col)ks.forEach(k=>walk(k,d+1));};
   S.objs.filter(o=>!par(o)).forEach(o=>walk(o,1));
   $('#hier-body').innerHTML=`<div class="hrow root" data-drop="hroot"><span>▾</span>SampleScene${S.dirty?' *':''}</div>`+rows.join('');
@@ -1202,12 +1372,12 @@ const ck=(tk,bind,on,dis)=>`<label class="ck"><input type="checkbox" ${bind?`dat
 const head=tk=>`<h4><span${tip(tk)}>${t(tk)}</span></h4>`;
 const rmBtn=c=>`<span class="sp"></span><button class="ibtn rm" data-act="rmcomp" data-c="${c}" title="${esc(t('removeComp'))}" aria-label="${esc(t('removeComp'))}">✕</button>`;
 const headRm=(tk,c)=>`<h4><span${tip(tk)}>${t(tk)}</span>${rmBtn(c)}</h4>`;
-const REF_NAME={uislider:'Slider',uitext:'TMP_Text',uiimage:'Image',uibutton:'Button'};
+const REF_NAME={uislider:'Slider',uitext:'TMP_Text',uiimage:'Image',uibutton:'Button',light:'Light'};
 const numRow=(tk,b,v,extra)=>`<div class="vrow"><label${tip(tk)}>${t(tk)}</label><div class="vin" style="max-width:110px"><input inputmode="decimal" data-bind="${b}" value="${fmt(v)}" aria-label="${esc(t(tk))}"${extra||''}></div></div>`;
 const colRow=(tk,b,v,pal)=>`<div class="vrow"><label>${t(tk)}</label><div class="slot"><span class="sw" style="background:${esc(v)}"></span><input class="hexin" data-bind="${b}" value="${esc(v)}" maxlength="7" aria-label="${esc(t(tk))}"></div></div>${pal?`<div class="pal">${pal.map(c=>`<button data-act="setc" data-b="${b}" data-c="${c}" style="background:${c}" aria-label="${t('colorAria',c)}"></button>`).join('')}</div>`:''}`;
 const LPAL=['#ffffff','#fff4e5','#ffd6a0','#ffb46b','#ff7a3a','#ff3b2f','#a8c8ff','#8affc1'];
 function lightInsp(o){const L_=o.light||mkLight('directional'),k=L_.kind;
-  return `<div class="comp">${head('light')}<div class="vrow"><label>${t('type')}</label><select class="schemesel" data-bind="ltype" aria-label="${t('type')}">${['directional','point','spot'].map(x=>`<option value="${x}"${x===k?' selected':''}>${t('lt_'+x)}</option>`).join('')}</select></div>
+  return `<div class="comp"><h4><input type="checkbox" data-bind="len" ${L_.enabled===false?'':'checked'} aria-label="${t('enabled')}"> <span${tip('light')}>${t('light')}</span></h4><div class="vrow"><label>${t('type')}</label><select class="schemesel" data-bind="ltype" aria-label="${t('type')}">${['directional','point','spot'].map(x=>`<option value="${x}"${x===k?' selected':''}>${t('lt_'+x)}</option>`).join('')}</select></div>
   ${colRow('colorL','lcolor',L_.color,LPAL)}${numRow('intensity','lint',L_.intensity)}${k!=='directional'?numRow('rangeL','lrange',L_.range):''}${k==='spot'?numRow('spotAngle','langle',L_.angle):''}</div>`;}
 function audioInsp(o){const au=o.audio,cl=au.clip!=null?asset(au.clip):null;
   return `<div class="comp">${headRm('audioSource','audio')}<div class="vrow"><label>${t('audioGen')}</label><div class="slot objref${cl?'':' none'}" data-drop="aclip:${o.id}" title="${esc(t('dropClip'))}">${cl?IC.audio(12)+' '+esc(cl.name):'None (Audio Clip)'}${cl?`<span class="sp"></span><button class="ibtn rm" data-act="clrclip" aria-label="✕">✕</button>`:''}</div></div>
@@ -1224,7 +1394,8 @@ function volInsp(o){const v=o.vol;
 const PAL=['#ffffff','#c9ccd1','#8a8f98','#5c5650','#4a4d52','#34302c','#1c1d20','#ff8a1f','#e5484d','#f2c230','#3fbf6a','#2c6bd1','#7a4fd0','#8a5a3b'];
 function scriptHTML(o,s,i){const a=asset(s.asset),tm=a?tmplOf(a):null,nm=a?a.name:t('missing');
   const fields=(tm&&LIB()[a.name]?tm.fields||[]:[]).map(f=>{const v=s.vals?s.vals[f.id]:null;
-    if(f.type==='transform'||f.type==='ref'){const tg=v!=null?obj(v):null;const none=f.type==='ref'?`None (${REF_NAME[f.accept]||'Object'})`:t('noneTransform');
+    if(f.type==='text')return `<div class="vrow"><label>${esc(f.label)}</label><input class="hexin" data-bind="fs.${i}.${f.id}" value="${esc(v==null?f.def:v)}" aria-label="${esc(f.label)}"></div>`;
+    if(f.type==='transform'||f.type==='ref'){const tg=v!=null?obj(v):null;const none=f.type==='ref'?`None (${REF_NAME[f.accept]||'Object'})`:f.go?'None (Game Object)':t('noneTransform');
       return `<div class="vrow"><label>${esc(f.label)}</label><div class="slot objref${tg?'':' none'}" data-drop="ref:${o.id}:${i}:${f.id}" title="${esc(t('dropObj'))}">${tg?objIcon(tg,12)+' '+esc(tg.name):esc(none)}${tg?`<span class="sp"></span><button class="ibtn rm" data-act="clrref" data-i="${i}" data-f="${f.id}" aria-label="✕">✕</button>`:''}</div></div>`;}
     if(f.type==='assetlist'){const list=(v||[]).map(id=>asset(id));
       return `<div class="vrow"><label>${esc(f.label)} <span class="tag">${list.length}</span></label><div class="slot alist" data-drop="alist:${o.id}:${i}:${f.id}">${list.length?list.map((it,k)=>`<span class="chip">${it?assetIcon(it,12)+' '+esc(it.name):'Missing'}<button class="ibtn rm" data-act="rmlist" data-i="${i}" data-f="${f.id}" data-k="${k}" aria-label="✕">✕</button></span>`).join(''):`<span class="none">${esc(t('listEmpty'))}</span>`}</div></div>`;}
@@ -1259,9 +1430,10 @@ function renderInsp(){
       ...(o.agent?[{seq:o.agent.seq||0,html:`<div class="comp">${headRm('navAgent','agent')}<div class="vrow"><label>${t('agentSpeed')}</label><div class="vin" style="max-width:110px"><input inputmode="decimal" data-bind="agspd" value="${fmt(o.agent.speed)}" aria-label="${t('agentSpeed')}"></div></div></div>`}]:[]),
       ...(o.audio?[{seq:o.audio.seq||0,html:audioInsp(o)}]:[]),
       ...(o.vol?[{seq:o.vol.seq||0,html:volInsp(o)}]:[]),
+      ...(o.anim?[{seq:o.anim.seq||0,html:`<div class="comp">${headRm('animatorComp','anim')}${kv('controllerL',esc((asset(o.anim.ctrl)||{}).name||'None'))}<div class="gact" style="margin-top:6px"><button class="btn" data-act="openanimator">${t('animatorWinM')}</button><button class="btn quiet" data-act="openanimwin">${t('animWinM')}</button></div></div>`}]:[]),
       ...(o.navs?[{seq:o.navs.seq||0,html:`<div class="comp">${headRm('navSurface','navs')}<div class="kv">${o.navs.baked?t('navBaked',o.navs.baked.w.split('1').length-1):t('navNone')}</div><div class="gact" style="margin-top:6px"><button class="btn" data-act="bake">${t('bake')}</button><button class="btn quiet" data-act="clearnav">${t('clearNav')}</button></div></div>`}]:[])
     ].sort((x,y)=>x.seq-y.seq);
-    b.innerHTML=`<div class="comp"><input class="nameinput" data-bind="name" value="${esc(o.name)}" aria-label="${t('objName')}">
+    b.innerHTML=`<div class="comp"><div class="namerow"><input type="checkbox" data-bind="active" ${o.active===false?'':'checked'} aria-label="${t('activeL')}" title="${esc(t('activeL'))}"><input class="nameinput" data-bind="name" value="${esc(o.name)}" aria-label="${t('objName')}"></div>
     <div class="tagrow"><label><span${tip('tag')}>${t('tag')}</span><select data-bind="tag">${TAGS.map(x=>`<option${x===o.tag?' selected':''}>${x}</option>`).join('')}</select></label>
     <label><span${tip('layer')}>${t('layer')}</span><select data-bind="layer">${LAYERS.map(x=>`<option${x===o.layer?' selected':''}>${x}</option>`).join('')}</select></label></div>
     ${o.prefab?`<div style="margin-top:6px;color:var(--accent);font-size:12px">${IC.cube(12)} <span${tip('prefabInst')}>${t('prefabInst')}</span><span class="tag">${esc((S.prefabs[o.prefab]||{}).name||'')}</span></div>`:''}</div>
@@ -1279,6 +1451,8 @@ function renderInsp(){
       <div class="comp"><h4>${t('palette')}<span class="sp"></span><select class="schemesel" data-bind="scheme" aria-label="${t('palette')}">${['analog','complement','triad','mono'].map(k=>`<option value="${k}"${k===palScheme?' selected':''}>${t(k)}</option>`).join('')}</select></h4><div class="pal palgen">${paletteOf(palBase.get(a.id)||a.color,palScheme).map(c=>`<button data-act="color" data-c="${c}" style="background:${c}" aria-label="${t('colorAria',c)}" title="${c}"></button>`).join('')}</div><button class="btn" data-act="palmats">${t('palMats')}</button></div>`;
     else if(a.type==='script'){const st=!a.comp?`<div class="kv">${t('notCompiled')}</div>`:a.comp.ok?`<div class="kv okc">${t('scriptOk')}</div>`:`<div class="kv bad">${t('scriptErrs',a.comp.errs.length)}</div>`;
       inner+=`<div class="comp">${head('monoscript')}${st}<button class="btn" data-act="openscript" data-id="${a.id}">${t('openCode')}</button>${!LIB()[a.name]?`<div class="warnbox">${esc(t('nameMismatch',a.name))}</div>`:''}</div>`;}
+    else if(a.type==='anim')inner+=`<div class="comp">${head('animClip')}${ck('loopTime','aloopt',a.loop)}${kv('lengthL',fmt(clipLen(a))+' s')}${kv('curvesL',Object.keys(a.curves).map(k=>t('aw_'+k)).join('、')||'—')}<p class="fnote">${esc(t('loopTimeNote'))}</p></div>`;
+    else if(a.type==='animctrl')inner+=`<div class="comp">${head('animCtrl')}${kv('statesL',a.states.map(x=>esc(x.name)).join('、'))}${kv('paramsL',a.params.map(x=>esc(x.name)).join('、')||'—')}<button class="btn" data-act="openanimator">${t('animatorWinM')}</button></div>`;
     else if(a.type==='audio'){const c=(ZTG.audio&&ZTG.audio.clips[a.clip])||{len:0};inner+=`<div class="comp">${head('audioClip')}${kv('lengthL',fmt(c.len)+' s')}<p class="fnote">${esc(L(c))}</p><button class="btn" data-act="preview" data-k="${esc(a.clip)}">▶ ${t('previewBtn')}</button></div>`;}
     else if(a.type==='itemdata')inner+=`<div class="comp">${head('itemDataT')}<div class="vrow"><label>${t('itemName')}</label><input class="hexin" data-bind="iname" value="${esc(a.itemName||'')}" aria-label="${t('itemName')}"></div><div class="vrow"><label>${t('iconColor')}</label><div class="slot"><span class="sw" style="background:${esc(a.color)}"></span><input class="hexin" data-bind="icolor" value="${esc(a.color)}" maxlength="7" aria-label="${t('iconColor')}"></div></div>${ck('stackable','istack',a.stackable)}<div class="vrow"><label>${t('maxStack')}</label><div class="vin" style="max-width:110px"><input inputmode="decimal" data-bind="imax" value="${a.maxStack}" aria-label="${t('maxStack')}"></div></div></div>`;
     else if(a.type==='prefab'){const pf=S.prefabs[a.prefabId];inner+=`<div class="comp">${head('prefabAsset')}${kv('instances',S.objs.filter(x=>x.prefab===a.prefabId).length)}${pf?vec('pscl','pscl',pf.scale.map(fmt)):''}</div>`;}
@@ -1297,7 +1471,8 @@ function syncInspector(){const o=selObj(),a=selAsset(),tg=selIds().length>1?selO
 $('#insp-body').addEventListener('change',e=>{const el=e.target,b=el.dataset.bind;if(!b)return;const [k,i,f]=b.split('.');const o=selObj(),a=selAsset();
   const tg=selIds().length>1?selObjs():(o?[o]:[]);
   const num=parseFloat(String(el.value).replace(',','.'));
-  if(k==='name'&&o)o.name=el.value||o.name;else if(k==='aname'&&a){a.name=(el.value||a.name).replace(/[\/\\]/g,'');a.comp=null;}
+  if(k==='name'&&o)o.name=el.value||o.name;else if(k==='active'&&o)o.active=el.checked;else if(k==='len'&&o&&o.light)o.light.enabled=el.checked;
+  else if(k==='fs'&&o&&o.scripts[+i]){o.scripts[+i].vals=o.scripts[+i].vals||{};o.scripts[+i].vals[f]=el.value;}else if(k==='aname'&&a){a.name=(el.value||a.name).replace(/[\/\\]/g,'');a.comp=null;}
   else if(k==='hex'&&a){if(/^#[0-9a-f]{6}$/i.test(el.value)){a.color=el.value.toLowerCase();palBase.set(a.id,a.color);}}
   else if(k==='scheme'){palScheme=el.value;}
   else if(k==='shader'&&a){a.shader=el.value;}
@@ -1317,6 +1492,7 @@ $('#insp-body').addEventListener('change',e=>{const el=e.target,b=el.dataset.bin
   else if(o&&o.audio&&(k==='avol'||k==='ablend'||k==='amin'||k==='amax')){if(!isNaN(num))o.audio[{avol:'volume',ablend:'blend',amin:'minDist',amax:'maxDist'}[k]]=k==='avol'||k==='ablend'?clamp(num,0,1):Math.max(.01,num);}
   else if(o&&o.cam&&k==='campost')o.cam.post=el.checked;
   else if(o&&o.vol&&k==='vo'&&o.vol.ov[i]){if(!isNaN(num))o.vol.ov[i][f]=f==='saturation'||f==='contrast'?clamp(num,-100,100):f==='postExposure'?clamp(num,-10,10):i==='bloom'?Math.max(0,num):clamp(num,0,1);}
+  else if(a&&a.type==='anim'&&k==='aloopt')a.loop=el.checked;
   else if(a&&k==='iname')a.itemName=el.value;
   else if(a&&k==='icolor'){if(/^#[0-9a-f]{6}$/i.test(el.value))a.color=el.value.toLowerCase();}
   else if(a&&k==='istack')a.stackable=el.checked;
@@ -1338,6 +1514,8 @@ $('#insp-body').addEventListener('click',e=>{const b=e.target.closest('[data-act
   else if(act==='bake'&&o&&o.navs)bakeNav(o);
   else if(act==='clearnav'&&o&&o.navs){o.navs.baked=null;log('info','lNavCleared');commit();}
   else if(act==='clrref'&&o){const s=o.scripts[+b.dataset.i];if(s&&s.vals)s.vals[b.dataset.f]=null;commit();}
+  else if(act==='openanimator'){if(a&&a.type==='animctrl')animrWin.ctrl=a.id;openAnimator();}
+  else if(act==='openanimwin')openAnimWin();
   else if(act==='setc'){const inp=$(`#insp-body [data-bind="${b.dataset.b}"]`);if(inp){inp.value=b.dataset.c;inp.dispatchEvent(new Event('change',{bubbles:true}));}}
   else if(act==='clrclip'&&o&&o.audio){o.audio.clip=null;commit();}
   else if(act==='preview'&&ZTG.audio){ZTG.audio.play(b.dataset.k,{volume:.9});}
@@ -1347,7 +1525,7 @@ $('#insp-body').addEventListener('click',e=>{const b=e.target.closest('[data-act
     openMenu([{tk:'postProc',k:'postproc',children:Object.keys(OV).sort((x,y)=>t(OVK[x]).localeCompare(t(OVK[y]))).map(k=>({tk:OVK[k],k:'ov_'+k,dis:!!o.vol.ov[k],fn:()=>{o.vol.ov[k]=Object.fromEntries(OV[k]);commit();}}))}],r.left,r.bottom+2);}
   else if(act==='rmlist'&&o){const s=o.scripts[+b.dataset.i];if(s&&s.vals&&s.vals[b.dataset.f])s.vals[b.dataset.f].splice(+b.dataset.k,1);commit();}});
 
-function commit(){trackUndo();S.dirty=snapJson()!==S.savedJson;updateFlags();renderChrome();renderHier();renderProj();renderInsp();renderGuide();updateGlow();updateHint();saveProgress();}
+function commit(){animRecordHook();trackUndo();S.dirty=snapJson()!==S.savedJson;updateFlags();renderChrome();renderHier();renderProj();renderInsp();renderGuide();updateGlow();updateHint();saveProgress();if(!animBusy){if(floatId==='anim')openAnimWin(true);else if(floatId==='animator')openAnimator(true);}}
 
 /* ---------- Hierarchy / Project events ---------- */
 $('#hier-body').addEventListener('click',e=>{
@@ -1362,7 +1540,7 @@ $('#hier-plus').dataset.plus='1';$('#hier-plus').addEventListener('click',e=>{co
 $('#proj-plus').dataset.plus='1';$('#proj-plus').addEventListener('click',e=>{const r=e.currentTarget.getBoundingClientRect();openMenu(itemsCreate(),r.left,r.bottom+2);});
 // 双击自己判断：第一下点击会重画项目窗口，浏览器的 dblclick 事件因此不会触发
 let lastTile={id:null,t:0};
-function openAsset(a){if(a.type==='folder'){S.cwd=a.id;select(null);commit();}else if(a.type==='script')openCode(a.id);}
+function openAsset(a){if(a.type==='folder'){S.cwd=a.id;select(null);commit();}else if(a.type==='script')openCode(a.id);else if(a.type==='animctrl'){animrWin.ctrl=a.id;openAnimator();}}
 $('#proj-body').addEventListener('click',e=>{
   const ln=e.target.closest('[data-sa]');if(ln){openCode(+ln.dataset.sa,+ln.dataset.sl);return;}
   const bt=e.target.closest('[data-act="cwd"]');if(bt){S.cwd=+bt.dataset.id;commit();return;}
@@ -1475,7 +1653,7 @@ const MENUS={
     {tk:'dup',k:'dup',fn:duplicateSel,dis:!selIds().length},{tk:'copy',k:'copy',fn:copySel,dis:!selIds().length},{tk:'paste',k:'paste',fn:pasteClip,dis:!clip},{tk:'del',k:'del',fn:deleteSel},
     {tk:'clearPrefs',k:'clearprefs',fn:()=>{prefsSet({});log('info','lPrefsCleared');toast(t('lPrefsCleared'));commit();if(floatId==='prefs')openPrefs();}}],
   go:()=>items3D(),
-  window:()=>[{tk:'renderingM',k:'rendering',children:[{tk:'lightingM',k:'lighting',fn:openLighting}]},{tk:'libraryM',k:'library',fn:openLibrary},{tk:'snapsM',k:'snaps',fn:openSnaps},{tk:'prefsM',k:'prefs',fn:openPrefs},{tk:'settingsM',k:'settings',fn:openSettings},{tk:'shortcutsM',k:'shortcuts',fn:openShortcuts},{tk:'layouts',k:'layouts',children:[{tk:'default',k:'default',fn:()=>{S.tab='scene';commit();toast(t('layoutReset'));}}]}]};
+  window:()=>[{tk:'animationM',k:'animation',children:[{tk:'animWinM',k:'animwin',fn:openAnimWin},{tk:'animatorWinM',k:'animatorwin',fn:openAnimator}]},{tk:'renderingM',k:'rendering',children:[{tk:'lightingM',k:'lighting',fn:openLighting}]},{tk:'libraryM',k:'library',fn:openLibrary},{tk:'snapsM',k:'snaps',fn:openSnaps},{tk:'prefsM',k:'prefs',fn:openPrefs},{tk:'settingsM',k:'settings',fn:openSettings},{tk:'shortcutsM',k:'shortcuts',fn:openShortcuts},{tk:'layouts',k:'layouts',children:[{tk:'default',k:'default',fn:()=>{S.tab='scene';commit();toast(t('layoutReset'));}}]}]};
 $$('.mbtn').forEach(b=>b.addEventListener('click',()=>{const was=b.classList.contains('open');closeMenu();if(was)return;const r=b.getBoundingClientRect();b.classList.add('open');openMenu(MENUS[b.dataset.menu](),r.left,r.bottom+2);b.classList.add('open');}));
 function startPlay(){if(S.playing)return;
   S.assets.forEach(a=>{const tm=a.type==='script'&&LIB()[a.name];if(tm&&!tm.blanks.length&&!a.comp)compileScript(a);});
@@ -1486,11 +1664,11 @@ function startPlay(){if(S.playing)return;
     const ln=blankPos('msg',{},tm).line;if(ln>=0)S.logs.push({t:now8(),k:'raw',a:[a.comp.rt.msg],type:'info',src:{a:a.id,l:ln}});
     if(tm.kind==='inventory')startInventory(o,s,a,tm);}
   // 键盘焦点不要留在检查器的输入框里，不然 W A S D 会打进输入框
-  S.frozen=false;playT=0;stopSounds();walkedNow=new Set();if(document.activeElement&&document.activeElement!==document.body)document.activeElement.blur();for(const o of S.objs)if(o.audio&&o.audio.awake&&o.audio.clip!=null)playSource(o);
+  S.frozen=false;playT=0;simStatic={};stopSounds();walkedNow=new Set();animState.clear();if(document.activeElement&&document.activeElement!==document.body)document.activeElement.blur();for(const o of S.objs)if(o.audio&&o.audio.awake&&o.audio.clip!=null&&isActive(o))playSource(o);
   commit();}
 function stopPlay(){if(!S.playing)return;const [objs,prefabs,en]=JSON.parse(S.snap);S.objs=objs;S.prefabs=prefabs;if(en)S.env=en;S.playing=false;S.paused=false;S.frozen=false;stopSounds();
-  if(S.flags.hitWall)S.flags.fpsStopped=true;
-  if(document.pointerLockElement)document.exitPointerLock();trigIn=new Set();agentState.clear();
+  if(S.flags.hitWall)S.flags.fpsStopped=true;if(S.flags.animLooped)S.flags.animStopped=true;
+  if(document.pointerLockElement)document.exitPointerLock();trigIn=new Set();agentState.clear();animState.clear();
   if(S.flags.movedInPlay)S.flags.stopped=true;if(S.flags.fell)S.flags.fellStopped=true;
   if(S.sel&&S.sel.k==='obj'){const ids=selIds().filter(id=>obj(id));if(!ids.length)select(null);else S.multi=ids;}
   lastModel=modelJson();log('info','lStop');commit();}
@@ -1499,23 +1677,24 @@ $('#pausebtn').addEventListener('click',()=>{if(!S.playing)return;S.paused=!S.pa
 // 每章可以有自己的初始场景（setup），找 Bug 挑战用坏掉的场景
 function setupMode(){if(isBugs())CHAP.bugs.setup();else if(isLesson()&&CHAP.setup)CHAP.setup();else return;S.objs.forEach(fixObj);S.savedJson=snapJson();resetUndo();}
 function reset(){closeMenu();closeCode();closeFloat();clearProgress();quiz=null;bugHintOpen.clear();init();setupMode();commit();}
-const chapTag=()=>MODE==='free'?t('freeTitle'):isBugs()?t('chN',chapNum())+' · '+t('bugsTitle'):t('chN',chapNum())+' · '+L(CHAP.title);
+const chapTag=()=>MODE==='free'?t('freeTitle'):isBugs()?chapLabel()+' · '+t('bugsTitle'):chapLabel()+' · '+L(CHAP.title);
 function enterMode(m){if(MODE===m)return;if(S.playing)stopPlay();closeMenu();closeCode();closeFloat();saveNow();
   MODE=m;setChap();quiz=null;bugHintOpen.clear();hintStep=-1;if(!loadProgress()){init();setupMode();}
   $('#chaptag').textContent=chapTag();commit();}
 const doneKey=n=>'ztg.ch'+n+'.done';
-function readDone(n){try{return localStorage.getItem(doneKey(n==null?chapNum():n))==='1';}catch(e){return false;}}
-function markDone(){try{localStorage.setItem(doneKey(chapNum()),'1');}catch(e){}}
+function readDone(n){try{return localStorage.getItem(doneKey(n==null?chapKey():n))==='1';}catch(e){return false;}}
+function markDone(){try{localStorage.setItem(doneKey(chapKey()),'1');}catch(e){}}
+const bugsMode=n=>n==='0'?'bugs':'bugs'+n,bugsId=n=>n==='0'?'chapbugs':'chapbugs'+n;
 // 主页：每章显示「开始 / 继续（步骤 n）/ 已完成」；找 Bug 挑战在完成那一章之后解锁
 function showHome(){if(S.playing)stopPlay();closeMenu();closeCode();closeFloat();saveNow();
-  for(const n of [0,1]){const st=$('#chap'+n+'st'),ch=ZTG.chapters['ch'+n];if(!st||!ch)continue;const d=readDone(n),step=MODE==='ch'+n?S.step:peekStep('ch'+n),mid=step>0&&step<ch.steps.length;
+  for(const n of CHAPS){const st=$('#chap'+n+'st'),ch=ZTG.chapters['ch'+n];if(!st||!ch)continue;const d=readDone(n),step=MODE==='ch'+n?S.step:peekStep('ch'+n),mid=step>0&&step<ch.steps.length;
     st.textContent=mid?t('cont',step+1):d?t('doneAgain'):t('start');st.classList.toggle('done',d&&!mid);
-    const bb=$(n?'#chapbugs1':'#chapbugs');bb.disabled=!d;bb.classList.toggle('locked',!d);$(n?'#chapbugs1st':'#chapbugsst').textContent=d?t('open'):t('lockedCh',n);}
+    const bb=$('#'+bugsId(n));bb.disabled=!d;bb.classList.toggle('locked',!d);$('#'+bugsId(n)+'st').textContent=d?t('open'):t('lockedChL',ch.label?L(ch.label):t('chN',+n));}
   $('#home').hidden=false;updateHint();}
 $('#homebtn').addEventListener('click',showHome);
 const openWork=()=>{$('#home').hidden=true;resize();updateHint();};
-[0,1].forEach(n=>{$('#chap'+n).addEventListener('click',()=>{enterMode('ch'+n);if(S.step>=STEPS.length){quiz=null;reset();}openWork();});
-  $(n?'#chapbugs1':'#chapbugs').addEventListener('click',()=>{if(!readDone(n))return;enterMode(n?'bugs1':'bugs');openWork();});});
+CHAPS.forEach(n=>{$('#chap'+n).addEventListener('click',()=>{enterMode('ch'+n);if(S.step>=STEPS.length){quiz=null;reset();}openWork();});
+  $('#'+bugsId(n)).addEventListener('click',()=>{if(!readDone(n))return;enterMode(bugsMode(n));openWork();});});
 $('#chapfree').addEventListener('click',()=>{enterMode('free');openWork();});
 $('#resetbtn').addEventListener('click',reset);
 
@@ -1536,6 +1715,8 @@ function applyStatic(){
   $('#ch0desc').textContent=t('ch0desc',ZTG.chapters.ch0.steps.length);
   $('#ch1title').textContent=L(ZTG.chapters.ch1.title);
   $('#ch1desc').textContent=t('ch1desc',ZTG.chapters.ch1.steps.length);
+  $('#ch1btitle').textContent=L(ZTG.chapters.ch1b.title);$('#ch1blabel').textContent=L(ZTG.chapters.ch1b.label);$('#chbugs1blabel').textContent=L(ZTG.chapters.ch1b.label);
+  $('#ch1bdesc').textContent=t('ch1bdesc',ZTG.chapters.ch1b.steps.length);
   $('#chaptag').textContent=chapTag();
   $$('.langbtn').forEach(b=>{b.textContent=ZTG.lang()==='zh'?'English':'中文';});
 }
@@ -1586,7 +1767,7 @@ function frame(ts){const dt=Math.min(.05,(ts-last)/1000||0);last=ts;let moving=f
   if(S.playing)updateSounds();
   if(S.playing&&!S.paused&&!S.frozen){looking=Math.abs(mdx)+Math.abs(mdy)>0;COLS=colList();const r=runScripts(dt);moving=r.moving;
     if(codeId!=null&&r.ran.has(codeId))updCount++;
-    COLS=colList();rbPhysics(dt);COLS=colList();if(triggers())S.sig='';}
+    runAnimators(dt);COLS=colList();rbPhysics(dt);COLS=colList();if(triggers())S.sig='';}
   else{mdx=mdy=0;}
   draw();runViz(moving,looking);
   // 卡住一段时间，提示自动升一级

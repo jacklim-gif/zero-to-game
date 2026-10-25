@@ -216,6 +216,23 @@ zh: {
   frozenTip:'游戏停住了（Time.timeScale = 0）。点上面的「播放」停止，再点一次重新开始。',
   soundL:'声音', on:'开', off:'关', soundsH:'声音', soundsNote:'这些声音是用代码合成的，不用下载。导入后在项目窗口的 Audio 文件夹里。',
   sceneLight:'灯光', sceneLightTip:'场景灯光：关掉后，场景窗口用明亮的灯光，方便在黑暗的场景里编辑（不影响游戏画面）',
+
+  // 第 1 章下篇 + 动画
+  ch1bdesc:n=>`按 F 捡手电筒和钥匙、录制开门动画、用 Animator 控制门、做一个 Jumpscare。${n} 步，约 45 分钟。接着第 1 章的走廊做。`,
+  bugsCard1b:'下篇的走廊坏掉了，把 4 个问题找出来修好。', lockedChL:n=>`完成${n}后解锁`,
+  activeL:'启用（SetActive）：取消勾选就把整个物体藏起来', animatorComp:'Animator（动画器）', controllerL:'控制器', animClip:'动画剪辑', loopTime:'循环时间（Loop Time）', curvesL:'动画属性',
+  loopTimeNote:'勾选时，动画播完会从头再来。开门这种只播一次的动画要取消勾选。', animCtrl:'动画控制器（Animator Controller）', statesL:'状态', paramsL:'参数',
+  animationM:'动画', animWinM:'动画窗口（Animation）', animatorWinM:'Animator 窗口',
+  awSelect:'先在层级里选中要做动画的物体。', awCreateIntro:n=>`要开始给 <b>${n}</b> 做动画，先建一个动画剪辑（Animation Clip）。`, awCreate:'创建', awCreateNote:'Unity 会顺便建一个动画控制器，并给物体加上 Animator 组件。',
+  awRecord:'录制', awTime:'时间', awAddProp:'添加属性', aw_pos:'位置', aw_rot:'旋转', aw_scl:'缩放', awNoProp:'还没有动画属性。点「录制」后在检查器改数值，或者点「添加属性」。',
+  awNote:'点上面的时间尺移动播放头（白线），场景里会显示那一刻的样子。菱形是关键帧。', awRecNote:'录制中：现在在检查器或场景里改位置、旋转、缩放，就会在播放头的时间记下关键帧。改完再点一次「录制」停止。',
+  arNoCtrl:'先选中一个有 Animator 组件的物体（或项目里的动画控制器）。', arParams:'参数', arAddParam:'添加参数', arNoParam:'还没有参数。点 + 添加。',
+  arLinkHint:'现在点另一个状态，建立过渡（按 Esc 取消）', arState:'状态', arName:'名字', arMotion:'动作（Motion）', arNone:'None（无）', arHasExit:'Has Exit Time（等播完一段才切换）',
+  arConds:'条件（Conditions）', arNoCond:'没有条件。', arAddCond:'添加条件', arTip:'点状态或过渡箭头看设置。右键状态：建立过渡、设为默认状态。右键空白处：新建状态。拖动可以移动状态。',
+  arMakeTrans:'建立过渡（Make Transition）', arSetDefault:'设为默认状态（Set as Layer Default State）', arCreateState:'新建状态（Create State）', arEmpty:'空状态（Empty）',
+  p_float:'Float（小数）', p_int:'Int（整数）', p_bool:'Bool（是 / 否）', p_trigger:'Trigger（触发器）',
+  lNoParam:n=>`Parameter '${n}' does not exist. Animator 里没有叫「${n}」的参数（大小写要一样）。`, lAnimCreated:(c,k)=>`建好了动画剪辑 ${c} 和动画控制器 ${k}，物体加上了 Animator 组件`,
+  whyNoAnim:'这个物体上没有 Animator 组件。先用动画窗口给它建一个动画。',
 },
 en: {
   appTitle:'Zero to Game',
@@ -422,6 +439,23 @@ en: {
   frozenTip:'The game is frozen (Time.timeScale = 0). Click Play at the top to stop, then click it again to restart.',
   soundL:'Sound', on:'On', off:'Off', soundsH:'Sounds', soundsNote:'These sounds are made in code — nothing to download. After importing they are in the Audio folder of the Project window.',
   sceneLight:'Lighting', sceneLightTip:'Scene lighting: turn it off to edit a dark scene with bright lights (the Game view is not affected)',
+
+  // Chapter 1 part 2 + animation
+  ch1bdesc:n=>`Press F to pick up a flashlight and a key, record a door animation, drive the door with an Animator, and build a jumpscare. ${n} steps, about 45 minutes. Continues the Chapter 1 corridor.`,
+  bugsCard1b:'The part 2 corridor is broken. Find and fix all 4 problems.', lockedChL:n=>`Unlocks after ${n}`,
+  activeL:'Active (SetActive): uncheck to hide the whole object', animatorComp:'Animator', controllerL:'Controller', animClip:'Animation Clip', loopTime:'Loop Time', curvesL:'Animated properties',
+  loopTimeNote:'When checked, the clip starts over when it ends. Uncheck it for one-shot animations like a door opening.', animCtrl:'Animator Controller', statesL:'States', paramsL:'Parameters',
+  animationM:'Animation', animWinM:'Animation', animatorWinM:'Animator',
+  awSelect:'Select the object you want to animate in the Hierarchy first.', awCreateIntro:n=>`To begin animating <b>${n}</b>, create an Animation Clip.`, awCreate:'Create', awCreateNote:'Unity also creates an Animator Controller and adds an Animator component to the object.',
+  awRecord:'Record', awTime:'Time', awAddProp:'Add Property', aw_pos:'Position', aw_rot:'Rotation', aw_scl:'Scale', awNoProp:'No animated properties yet. Press Record and change values in the Inspector, or click Add Property.',
+  awNote:'Click the time ruler to move the playhead (white line); the Scene shows that moment. Diamonds are keyframes.', awRecNote:'Recording: any change to Position, Rotation or Scale in the Inspector or Scene adds a keyframe at the playhead. Press Record again to stop.',
+  arNoCtrl:'Select an object with an Animator component (or an Animator Controller in the Project window).', arParams:'Parameters', arAddParam:'Add parameter', arNoParam:'No parameters yet. Click + to add one.',
+  arLinkHint:'Now click another state to make the transition (Esc cancels)', arState:'State', arName:'Name', arMotion:'Motion', arNone:'None', arHasExit:'Has Exit Time (wait for part of the clip before switching)',
+  arConds:'Conditions', arNoCond:'No conditions.', arAddCond:'Add condition', arTip:'Click a state or a transition arrow to see its settings. Right-click a state: Make Transition, Set as Layer Default State. Right-click empty space: Create State. Drag to move states.',
+  arMakeTrans:'Make Transition', arSetDefault:'Set as Layer Default State', arCreateState:'Create State', arEmpty:'Empty',
+  p_float:'Float', p_int:'Int', p_bool:'Bool', p_trigger:'Trigger',
+  lNoParam:n=>`Parameter '${n}' does not exist.`, lAnimCreated:(c,k)=>`Created Animation Clip ${c} and Animator Controller ${k}, and added an Animator component`,
+  whyNoAnim:'',
 },
 };
 
@@ -474,6 +508,12 @@ const TERMS = {
   volume:{zh:['全局体积','体积'],en:['Global Volume','Volume'],t:{zh:'放后期处理效果的地方。全局体积对整个场景都有效。',en:'Where post-processing effects live. A Global Volume affects the whole scene.'}},
   postProcessing:{zh:['后期处理'],en:['post-processing','Post-processing'],t:{zh:'画面拍好之后再加的滤镜：暗角、颗粒、泛光、调色。摄像机要勾选「后期处理」才会生效。',en:'Filters added after the image is rendered: vignette, grain, bloom, color grading. The camera’s Post Processing box must be checked.'}},
   trigger:{zh:['触发器','触发区'],en:['trigger'],t:{zh:'勾选了「是触发器」的碰撞体：不会挡路，只会在有东西进来时通知脚本（OnTriggerEnter）。',en:'A collider with Is Trigger checked: it doesn’t block anything, it just tells scripts when something enters (OnTriggerEnter).'}},
+  animClip:{zh:['动画剪辑'],en:['Animation Clip'],t:{zh:'一段动画：在不同时间点记下的位置、旋转（关键帧），中间 Unity 会自动补齐。',en:'A piece of animation: positions and rotations recorded at moments in time (keyframes). Unity fills in between.'}},
+  keyframe:{zh:['关键帧'],en:['keyframe'],t:{zh:'某一刻物体的样子。两个关键帧之间，Unity 会自动算出中间的动作。',en:'What an object looks like at one moment. Between two keyframes Unity works out the motion.'}},
+  animator:{zh:['Animator','动画控制器'],en:['Animator','Animator Controller'],t:{zh:'决定「现在播哪段动画」：几个状态，用参数和过渡在它们之间切换。',en:'Decides which animation plays now: a few states, switched by parameters and transitions.'}},
+  coroutine:{zh:['协程'],en:['coroutine'],t:{zh:'可以「暂停一下，下一帧或几秒后再继续」的方法。用来做有先后顺序、需要时间的事。',en:'A method that can pause and continue next frame or seconds later. Used for things that happen over time.'}},
+  setActive:{zh:['SetActive'],en:['SetActive'],t:{zh:'整个物体的开关（检查器里名字旁边的勾）。关掉就看不见、不碰撞、脚本也不跑。',en:'The on/off switch for a whole object (the checkbox by its name). Off means invisible, no collisions, no scripts.'}},
+  pivot:{zh:['轴心','门轴'],en:['pivot','hinge'],t:{zh:'物体旋转时绕着转的那个点。立方体绕中心转；想绕边转，就放进一个空物体里，转空物体。',en:'The point an object turns around. A cube turns around its center; to turn around an edge, put it inside an empty object and turn that.'}},
   nullRef:{zh:['NullReferenceException'],en:['NullReferenceException'],t:{zh:'最常见的报错：代码想用一个东西，但它是空的（null）。通常是组件没加，或者检查器里的格子没拖东西进去。',en:"The most common error: the code tries to use something that is empty (null). Usually a component is missing or an Inspector slot is empty."}},
 };
 G.terms = TERMS;

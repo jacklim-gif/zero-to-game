@@ -9,6 +9,7 @@ const CLIPS = {
   footstep: { name: 'Footstep', zh: '脚步声', en: 'Footstep', len: 0.3 },
   drone:    { name: 'Drone',    zh: '低沉的环境音（可循环）', en: 'Dark ambience (loops)', len: 6 },
   growl:    { name: 'Growl',    zh: '怪物低吼', en: 'Monster growl', len: 1.4 },
+  scream:   { name: 'Scream',   zh: '突然的尖叫（吓人用）', en: 'Sudden scream (for scares)', len: 1.1 },
 };
 
 let ctx = null, master = null, muted = false;
@@ -55,6 +56,15 @@ function synth(key) {
       lp += (saw + r() * 0.5 - lp) * 0.12;
       const env = Math.min(1, t * 6) * Math.exp(-Math.max(0, t - 0.8) * 5);
       d[i] = lp * env * 1.1;
+    }
+  } else if (key === 'scream') {
+    // 刺耳的高音往下滑 + 噪音，一开始最大声
+    let ph = 0, ph2 = 0;
+    for (let i = 0; i < len; i++) {
+      const t = i / sr, f = 1400 - 700 * t + 60 * Math.sin(2 * Math.PI * 23 * t);
+      ph += f / sr; ph2 += f * 1.49 / sr;
+      const env = Math.min(1, t * 80) * Math.exp(-t * 2.2);
+      d[i] = (Math.sin(2 * Math.PI * ph) * 0.5 + (2 * (ph2 % 1) - 1) * 0.35 + r() * 0.35) * env;
     }
   }
   let peak = 0; for (let i = 0; i < len; i++) peak = Math.max(peak, Math.abs(d[i]));

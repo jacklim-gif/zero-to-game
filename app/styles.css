@@ -295,3 +295,48 @@ button.chap[disabled] .st{background:var(--panel2);color:var(--muted)}
 .sndic{width:120px;height:60px;display:grid;place-items:center;border-radius:6px;background:#1d2b38;color:#7fd1ff}
 .libcard .gact{margin:0;justify-content:center}
 .libcard .fnote{margin:0;text-align:center;max-width:120px}
+.namerow{display:flex;align-items:center;gap:6px}.namerow input[type=checkbox]{flex:none;accent-color:var(--accent);width:15px;height:15px}
+.hrow.off span:last-child{opacity:.45}
+
+/* 第 1 章下篇：动画窗口、Animator 窗口（停靠在下方，不挡住检查器） */
+#float.bottom{align-items:flex-end;justify-content:center;padding:60px 18px 14px}
+.fwin.wide{width:min(1000px,100%);max-height:48vh}
+.awbar{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.awrec.on{background:#d33b3b;border-color:#d33b3b;color:#fff}
+.awt{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);white-space:nowrap}
+.awt .hexin{width:60px;flex:none}
+.awcreate{display:flex;gap:8px;margin:8px 0}.awcreate .hexin{flex:1;width:auto}
+.awgrid{display:flex;border:1px solid var(--line);border-radius:6px;overflow:auto}
+.awgrid.rec .awtl{background:rgba(211,59,59,.14)}
+.awlab{min-width:230px;flex:none;border-right:1px solid var(--line)}
+.awhead{height:24px;border-bottom:1px solid var(--line);position:relative;font-size:10px;color:var(--muted);cursor:pointer}
+.awhead span{position:absolute;top:5px;transform:translateX(3px);pointer-events:none}
+.awhead span::before{content:"";position:absolute;left:-3px;top:-5px;height:6px;border-left:1px solid var(--muted)}
+.awhead2{height:18px;cursor:pointer}
+.awrow{height:28px;display:flex;align-items:center;padding:0 8px;font-size:12px;position:relative;border-bottom:1px solid var(--line);white-space:nowrap}
+.awv{color:var(--muted);margin-left:6px;font-family:var(--mono);font-size:11px}
+.awtl{position:relative;flex:none;background:var(--panel2)}
+.awtl .awrow{padding:0}
+.kf{position:absolute;top:9px;width:10px;height:10px;margin-left:-5px;background:#cfd8e6;transform:rotate(45deg);cursor:pointer;border:1px solid #333}
+.awph{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:#f0f0f0;pointer-events:none}
+.awgrid.rec .awph{background:#ff4d4d}
+.animr{display:flex;gap:10px}
+.aparams{width:200px;flex:none;border:1px solid var(--line);border-radius:6px;padding:6px;align-self:flex-start}
+.aph{display:flex;align-items:center;margin-bottom:6px}
+.aprow{display:flex;align-items:center;gap:4px;margin-bottom:4px}.aprow .hexin,.aprow select{flex:1;min-width:0;width:auto}
+.ptype{font-size:10px;color:var(--muted);white-space:nowrap}
+.agraph{position:relative;flex:1;height:270px;border:1px solid var(--line);border-radius:6px;overflow:hidden;
+  background:repeating-linear-gradient(0deg,transparent 0 19px,rgba(255,255,255,.04) 19px 20px),repeating-linear-gradient(90deg,transparent 0 19px,rgba(255,255,255,.04) 19px 20px),#262a31}
+.alines{position:absolute;inset:0;pointer-events:none}
+.alines g[data-ar]{pointer-events:auto}
+.alines line{stroke:#d9dde3;stroke-width:2}.alines line.hit{stroke:transparent;stroke-width:14;cursor:pointer}.alines path{fill:#d9dde3}
+.alines .entry line:not(.hit){stroke:#f0b24a}.alines .entry path{fill:#f0b24a}
+.alines .sel line:not(.hit){stroke:#4f8cff}.alines .sel path{fill:#4f8cff}
+.alines line.linking{stroke:#4f8cff;stroke-dasharray:6 4}
+.anode{position:absolute;width:140px;height:36px;display:grid;place-items:center;border-radius:6px;font-size:12px;color:#fff;background:#5a5f68;border:2px solid transparent;user-select:none;cursor:grab;z-index:1}
+.anode.entry{background:#2f8f4e;width:90px;cursor:default}
+.anode.def{background:#c47a23}
+.anode.sel{border-color:#4f8cff}
+.alinkhint{position:absolute;left:8px;bottom:8px;font-size:11px;background:rgba(10,12,16,.8);color:#fff;padding:3px 8px;border-radius:4px;z-index:2}
+.ainsp{margin-top:8px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;min-height:40px}
+.ainsp .vrow{max-width:420px}

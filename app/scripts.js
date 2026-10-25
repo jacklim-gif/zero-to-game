@@ -381,5 +381,198 @@ const ExitZone = {
     { c: ['}'] }],
 };
 
-ZTG.scriptLib = { FirstPersonMove, EnemyChase, SurvivalStats, DayNightCycle, SaveLoad, ItemData, Inventory, LightFlicker, Footsteps, DoorOpen, CatchPlayer, ExitZone };
+// ---------- 第 1 章下篇：互动、钥匙、锁着的门、Jumpscare ----------
+// 子类（FlashlightPickup 等）继承 Interactable：项目里没有 Interactable 脚本时，会报和真 Unity 一样的 CS0246
+const hasScript = n => !!(window.ZTG.S && window.ZTG.S.assets.some(a => a.type === 'script' && a.name === n));
+const needs = (lines, names) => names.filter(n => !hasScript(n)).map(n => ({ line: lines.findIndex(l => l.c.some(x => typeof x === 'string' && x.includes(n))), code: 'CS0246',
+  en: `The type or namespace name '${n}' could not be found (are you missing a using directive or an assembly reference?)`, zh: `找不到「${n}」。先在项目里建一个叫 ${n} 的脚本。` }));
+
+const Interactable = {
+  name: 'Interactable', kind: 'base', interactable: true, blanks: [], answers: {}, compile: noBlanks,
+  fields: [{ id: 'promptText', label: 'Prompt Text', type: 'text', def: 'Press F' }],
+  lines: [
+    { c: ['using UnityEngine;'] },
+    { c: [''] },
+    { c: ['public class Interactable : MonoBehaviour'], x: { zh: '「可以互动的东西」的共同模板。手电筒、钥匙、门都继承它。它自己不做什么事。', en: 'The shared template for things you can interact with. The flashlight, key and door all inherit from it. On its own it does nothing.' } },
+    { c: ['{'] },
+    { c: ['    public string promptText = "Press F";'], x: { zh: '看着它时，屏幕上显示的提示。', en: 'The hint shown on screen while you look at it.' } },
+    { c: [''] },
+    { c: ['    public virtual void Use()'], x: { zh: 'virtual：子类可以用 override 改写这个方法，各自决定「按 F 之后做什么」。', en: 'virtual means subclasses can override this method and decide for themselves what happens when you press F.' } },
+    { c: ['    {'] },
+    { c: ['    }'] },
+    { c: ['}'] }],
+};
+
+const Interact = {
+  name: 'Interact', kind: 'interact', deps: ['Interactable'],
+  fields: [{ id: 'prompt', label: 'Prompt', type: 'ref', accept: 'uitext', def: null }],
+  blanks: [
+    { id: 'reach', w: 4, tip: { zh: '手能伸多远（米），例如 3f', en: 'How far you can reach, in meters, e.g. 3f' } },
+    { id: 'key', w: 5, tip: { zh: '要按的键：fKey（F 键）', en: 'The key to press: fKey (the F key)' } }],
+  answers: { reach: '3f', key: 'fKey' },
+  compile(b) {
+    const E = [], rt = { reach: 3, key: 'KeyF' };
+    floatBlank(E, b, 'reach', rt);
+    const k = val(b, 'key'), m = /^([a-z])Key$/.exec(k);
+    if (!k) E.push({ b: 'key', code: 'CS1001', en: 'Identifier expected', zh: '点号后面空着，要填 fKey。' });
+    else if (!m) E.push({ b: 'key', code: 'CS1061', en: `'Keyboard' does not contain a definition for '${k}' and no accessible extension method '${k}' accepting a first argument of type 'Keyboard' could be found (are you missing a using directive or an assembly reference?)`, zh: `键盘没有「${k}」。F 键要写 fKey（f 小写，K 大写）。` });
+    else rt.key = 'Key' + m[1].toUpperCase();
+    return { errors: E.concat(needs(Interact.lines, ['Interactable'])), rt };
+  },
+  lines: [
+    { c: ['using UnityEngine;'] },
+    { c: ['using UnityEngine.InputSystem;'] },
+    { c: ['using TMPro;'] },
+    { c: [''] },
+    { c: ['public class Interact : MonoBehaviour'], x: { zh: '挂在主摄像机上：看着可以互动的东西，就显示提示；按 F 就使用它。', en: 'Goes on the Main Camera: when you look at something interactable, show its hint; press F to use it.' } },
+    { c: ['{'] },
+    { c: ['    public TMP_Text prompt;'], err: 'noPrompt', x: { zh: '显示提示的 UI 文本。', en: 'The UI text that shows the hint.' } },
+    { c: ['    public float reach = ', B('reach'), ';'], x: { zh: '射线多长：太远的东西够不到。', en: 'How long the ray is: things farther away are out of reach.' } },
+    { c: [''] },
+    { c: ['    void Update()'], run: 'update' },
+    { c: ['    {'], run: 'update' },
+    { c: ['        prompt.text = "";'], run: 'update', err: 'noPrompt', x: { zh: '每一帧先把提示清空，看着东西时才写上。', en: 'Clear the hint every frame; it is only filled in while you look at something.' } },
+    { c: ['        if (!Physics.Raycast(transform.position, transform.forward, out RaycastHit hit, reach)) return;'], run: 'update', x: { zh: '从摄像机往正前方射一条看不见的线。没打中东西就到此为止。打中了，hit 里就有打中的东西。', en: 'Shoot an invisible line straight ahead from the camera. If it hits nothing, stop. If it hits, hit tells you what.' } },
+    { c: ['        Interactable thing = hit.collider.GetComponentInParent<Interactable>();'], run: 'update', x: { zh: '在打中的物体（或它的父物体）上找 Interactable。手电筒、钥匙、门的脚本都算，因为它们都继承了 Interactable。', en: 'Look for an Interactable on the object that was hit (or its parents). The flashlight, key and door scripts all count, because they inherit Interactable.' } },
+    { c: ['        if (thing == null) return;'], run: 'update' },
+    { c: ['        prompt.text = thing.promptText;'], run: 'update' },
+    { c: ['        if (Keyboard.current.', B('key'), '.wasPressedThisFrame)'], run: 'update', key: 'KeyF' },
+    { c: ['            thing.Use();'], run: 'move', x: { zh: '调用它的 Use。具体做什么由各自的脚本决定。', en: 'Calls its Use. What actually happens is up to each script.' } },
+    { c: ['    }'], run: 'update' },
+    { c: ['}'] }],
+};
+
+const FlashlightPickup = {
+  name: 'FlashlightPickup', kind: 'pickupLight', interactable: true, deps: ['Interactable'], blanks: [], answers: {},
+  compile() { return { errors: needs(FlashlightPickup.lines, ['Interactable']), rt: {} }; },
+  fields: [{ id: 'promptText', label: 'Prompt Text', type: 'text', def: 'Press F to take the flashlight' }, { id: 'flashlight', label: 'Flashlight', type: 'ref', accept: 'light', def: null }],
+  lines: [
+    { c: ['using UnityEngine;'] },
+    { c: [''] },
+    { c: ['public class FlashlightPickup : Interactable'], x: { zh: '继承 Interactable：自动有 promptText 和 Use，只要改写 Use 就好。', en: 'Inherits Interactable: it gets promptText and Use for free, and only needs to override Use.' } },
+    { c: ['{'] },
+    { c: ['    public Light flashlight;'], err: 'noLight2', x: { zh: '手里那支（摄像机下面的）手电筒的灯光。', en: 'The Light of the flashlight in your hand (under the camera).' } },
+    { c: [''] },
+    { c: ['    public override void Use()'], run: 'trigger', x: { zh: 'override：改写父类的 Use。', en: 'override replaces the parent class’s Use.' } },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        flashlight.enabled = true;'], run: 'trigger', err: 'noLight2', x: { zh: '把手里的灯打开。enabled 是组件的开关（检查器里组件名字旁边的勾）。', en: 'Turns on the light in your hand. enabled is the component’s on/off switch (the checkbox next to its name in the Inspector).' } },
+    { c: ['        gameObject.SetActive(false);'], run: 'trigger', x: { zh: '把地上这支藏起来。SetActive 是整个物体的开关（名字旁边的勾）。看起来就像「捡起来了」。', en: 'Hides the one on the floor. SetActive switches the whole object (the checkbox next to its name). It looks like you picked it up.' } },
+    { c: ['    }'], run: 'trigger' },
+    { c: ['}'] }],
+};
+
+const KeyPickup = {
+  name: 'KeyPickup', kind: 'pickupKey', interactable: true, deps: ['Interactable'], blanks: [], answers: {},
+  compile() { return { errors: needs(KeyPickup.lines, ['Interactable']), rt: {} }; },
+  fields: [{ id: 'promptText', label: 'Prompt Text', type: 'text', def: 'Press F to take the key' }],
+  lines: [
+    { c: ['using UnityEngine;'] },
+    { c: [''] },
+    { c: ['public class KeyPickup : Interactable'] },
+    { c: ['{'] },
+    { c: ['    public static bool hasKey;'], x: { zh: 'static：整个游戏只有一份，别的脚本可以直接用 KeyPickup.hasKey 读它。', en: 'static means there is only one for the whole game, so other scripts can read it as KeyPickup.hasKey.' } },
+    { c: [''] },
+    { c: ['    public override void Use()'], run: 'trigger' },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        hasKey = true;'], run: 'trigger', x: { zh: '记下：拿到钥匙了。', en: 'Remember that we have the key.' } },
+    { c: ['        gameObject.SetActive(false);'], run: 'trigger' },
+    { c: ['    }'], run: 'trigger' },
+    { c: ['}'] }],
+};
+
+const LockedDoor = {
+  name: 'LockedDoor', kind: 'lockedDoor', interactable: true, deps: ['Interactable', 'KeyPickup'], blanks: [], answers: {},
+  compile() { return { errors: needs(LockedDoor.lines, ['Interactable', 'KeyPickup']), rt: {} }; },
+  fields: [{ id: 'promptText', label: 'Prompt Text', type: 'text', def: 'Press F to open' }, { id: 'lockedText', label: 'Locked Text', type: 'text', def: 'Locked. Find the key.' }],
+  lines: [
+    { c: ['using UnityEngine;'] },
+    { c: [''] },
+    { c: ['public class LockedDoor : Interactable'], x: { zh: '挂在门轴（有 Animator 的物体）上。没钥匙就提示锁着，有钥匙就播放开门动画。', en: 'Goes on the door hinge (the object with the Animator). Without the key it says locked; with the key it plays the opening animation.' } },
+    { c: ['{'] },
+    { c: ['    public string lockedText = "Locked. Find the key.";'] },
+    { c: ['    Animator animator;'] },
+    { c: ['    bool opened;'] },
+    { c: [''] },
+    { c: ['    void Start()'], run: 'start' },
+    { c: ['    {'], run: 'start' },
+    { c: ['        animator = GetComponent<Animator>();'], run: 'start' },
+    { c: ['    }'], run: 'start' },
+    { c: [''] },
+    { c: ['    public override void Use()'], run: 'trigger' },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        if (opened) return;'], run: 'trigger' },
+    { c: ['        if (!KeyPickup.hasKey)'], run: 'trigger', x: { zh: '读 KeyPickup 里那个 static 的 hasKey。', en: 'Reads the static hasKey from KeyPickup.' } },
+    { c: ['        {'], run: 'trigger' },
+    { c: ['            promptText = lockedText;'], run: 'trigger' },
+    { c: ['            return;'], run: 'trigger' },
+    { c: ['        }'], run: 'trigger' },
+    { c: ['        animator.SetTrigger("Open");'], run: 'trigger', err: 'noAnim', x: { zh: '告诉 Animator：触发 Open 参数。Animator 里要有一个叫 Open 的 Trigger 参数，大小写都要一样。', en: 'Tells the Animator to fire the Open parameter. The Animator needs a Trigger parameter named exactly Open.' } },
+    { c: ['        opened = true;'], run: 'trigger' },
+    { c: ['        promptText = "";'], run: 'trigger' },
+    { c: ['    }'], run: 'trigger' },
+    { c: ['}'] }],
+};
+
+const Jumpscare = {
+  name: 'Jumpscare', kind: 'jumpscare',
+  fields: [{ id: 'ghost', label: 'Ghost', type: 'transform', go: true, def: null }, { id: 'cam', label: 'Cam', type: 'transform', def: null },
+           { id: 'scareLight', label: 'Scare Light', type: 'ref', accept: 'light', def: null },
+           { id: 'showTime', label: 'Show Time', type: 'float', def: 0.6 }, { id: 'shakeAmount', label: 'Shake Amount', type: 'float', def: 0.08 }],
+  blanks: [
+    { id: 'co', w: 14, tip: { zh: '启动协程的方法：StartCoroutine', en: 'The method that starts a coroutine: StartCoroutine' } },
+    { id: 'ie', w: 11, tip: { zh: '协程的返回类型：IEnumerator', en: 'A coroutine’s return type: IEnumerator' } }],
+  answers: { co: 'StartCoroutine', ie: 'IEnumerator' },
+  compile(b) {
+    const E = [], rt = {};
+    const co = val(b, 'co');
+    if (!co) E.push({ b: 'co', code: 'CS1525', en: "Invalid expression term '('", zh: '这里空着，要填 StartCoroutine。' });
+    else if (co !== 'StartCoroutine') E.push({ b: 'co', code: 'CS0103', en: `The name '${co}' does not exist in the current context`, zh: `电脑不认识「${co}」。要写 StartCoroutine（S 和 C 大写）。` });
+    const ie = val(b, 'ie');
+    if (!ie) E.push({ b: 'ie', code: 'CS1519', en: "Invalid token '(' in class, record, struct, or interface member declaration", zh: '方法名前面要写返回类型：IEnumerator。' });
+    else if (ie === 'void') E.push({ b: 'ie', code: 'CS1624', en: "The body of 'Jumpscare.Scare()' cannot be an iterator block because 'void' is not an iterator interface type", zh: '里面用了 yield，返回类型就不能是 void，要写 IEnumerator。' });
+    else if (ie !== 'IEnumerator') E.push({ b: 'ie', code: 'CS0246', en: `The type or namespace name '${ie}' could not be found (are you missing a using directive or an assembly reference?)`, zh: `找不到「${ie}」。要写 IEnumerator（I 和 E 大写）。` });
+    return { errors: E, rt };
+  },
+  lines: [
+    { c: ['using UnityEngine;'] },
+    { c: ['using System.Collections;'], x: { zh: '协程要用的 IEnumerator 在这里面。', en: 'IEnumerator, which coroutines need, lives here.' } },
+    { c: [''] },
+    { c: ['public class Jumpscare : MonoBehaviour'], x: { zh: '挂在触发区上：玩家走进来，鬼突然出现、尖叫、镜头抖，一下子又消失。', en: 'Goes on a trigger zone: when the player walks in, a ghost appears, screams, the camera shakes, and it vanishes again.' } },
+    { c: ['{'] },
+    { c: ['    public GameObject ghost;'], err: 'noGhost' },
+    { c: ['    public Transform cam;'], err: 'noCamRef' },
+    { c: ['    public Light scareLight;'] },
+    { c: ['    public float showTime = 0.6f;'], x: { zh: '鬼出现几秒。', en: 'How many seconds the ghost shows.' } },
+    { c: ['    public float shakeAmount = 0.08f;'], x: { zh: '镜头抖多厉害（米）。', en: 'How hard the camera shakes, in meters.' } },
+    { c: ['    bool done;'], x: { zh: '只吓一次。', en: 'Only scare once.' } },
+    { c: [''] },
+    { c: ['    void OnTriggerEnter(Collider other)'], run: 'trigger' },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        if (done || !other.CompareTag("Player")) return;'], run: 'trigger', x: { zh: '|| 是「或者」：已经吓过了，或者进来的不是玩家，就什么都不做。', en: '|| means “or”: if we already scared them, or it isn’t the player, do nothing.' } },
+    { c: ['        done = true;'], run: 'trigger' },
+    { c: ['        ', B('co'), '(Scare());'], run: 'trigger', x: { zh: '启动协程：Scare 会一边跑，一边让游戏继续，不会卡住画面。', en: 'Starts a coroutine: Scare runs over several frames while the game keeps going.' } },
+    { c: ['    }'], run: 'trigger' },
+    { c: [''] },
+    { c: ['    ', B('ie'), ' Scare()'], x: { zh: '协程：可以「等一下再继续」的方法。返回类型必须是 IEnumerator。', en: 'A coroutine: a method that can pause and continue later. Its return type must be IEnumerator.' } },
+    { c: ['    {'] },
+    { c: ['        ghost.SetActive(true);'], run: 'trigger', err: 'noGhost', x: { zh: '把藏起来的鬼打开。', en: 'Switches the hidden ghost on.' } },
+    { c: ['        GetComponent<AudioSource>().Play();'], run: 'trigger', err: 'noAudio', x: { zh: '播放这个物体上的声音（尖叫）。', en: 'Plays the sound on this object (the scream).' } },
+    { c: ['        if (scareLight != null) scareLight.enabled = true;'], run: 'trigger', x: { zh: '!= null：格子里有拖东西进来才用它。没有的话跳过，不会报错。', en: '!= null: only use it if something was dragged into the slot. Otherwise skip it — no error.' } },
+    { c: ['        Vector3 start = cam.localPosition;'], run: 'trigger', err: 'noCamRef' },
+    { c: ['        float t = 0f;'], run: 'trigger' },
+    { c: ['        while (t < showTime)'], run: 'move', x: { zh: 'while：只要还没到时间，就一直重复下面这段。', en: 'while: keep repeating the block below until time is up.' } },
+    { c: ['        {'], run: 'move' },
+    { c: ['            cam.localPosition = start + Random.insideUnitSphere * shakeAmount;'], run: 'move', x: { zh: '每一帧把摄像机往随便一个方向挪一点点，就是「抖」。', en: 'Each frame, nudge the camera a little in a random direction — that’s the shake.' } },
+    { c: ['            t += Time.deltaTime;'], run: 'move' },
+    { c: ['            yield return null;'], run: 'move', x: { zh: 'yield return null：先停在这里，下一帧再继续。', en: 'yield return null: pause here and continue next frame.' } },
+    { c: ['        }'], run: 'move' },
+    { c: ['        cam.localPosition = start;'] },
+    { c: ['        ghost.SetActive(false);'] },
+    { c: ['        if (scareLight != null) scareLight.enabled = false;'] },
+    { c: ['    }'] },
+    { c: ['}'] }],
+};
+
+ZTG.scriptLib = { FirstPersonMove, EnemyChase, SurvivalStats, DayNightCycle, SaveLoad, ItemData, Inventory, LightFlicker, Footsteps, DoorOpen, CatchPlayer, ExitZone,
+  Interactable, Interact, FlashlightPickup, KeyPickup, LockedDoor, Jumpscare };
 })();
