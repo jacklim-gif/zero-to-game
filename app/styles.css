@@ -126,8 +126,9 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
 @keyframes pulse{50%{outline-color:transparent}}
 @media (prefers-reduced-motion:reduce){.glow{animation:none}.gbar i{transition:none}}
 /* Home */
-.home{position:fixed;inset:0;z-index:800;background:var(--bg);overflow:auto;display:flex;align-items:center;justify-content:center;padding:32px 20px}
-.home-in{width:min(860px,100%);display:flex;flex-direction:column;gap:22px}
+/* margin:auto 居中：内容比窗口高时，顶部不会被挤到看不见的地方 */
+.home{position:fixed;inset:0;z-index:800;background:var(--bg);overflow:auto;display:flex;padding:32px 20px}
+.home-in{width:min(860px,100%);display:flex;flex-direction:column;gap:22px;margin:auto}
 .home-head{display:flex;gap:18px;align-items:center}
 .home-head h1{margin:0 0 4px;font-size:30px;line-height:1.2;text-wrap:balance}
 .home-head p{margin:0;color:var(--muted);max-width:60ch;font-size:14px}

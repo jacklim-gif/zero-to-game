@@ -102,34 +102,6 @@ const EnemyChase = {
     { c: ['}'] }],
 };
 
-const SurvivalStats = {
-  name: 'SurvivalStats', kind: 'survival', blanks: [], answers: {}, compile: noBlanks,
-  fields: [{ id: 'hungerBar', label: 'Hunger Bar', type: 'ref', accept: 'uislider', def: null },
-           { id: 'hunger', label: 'Hunger', type: 'float', def: 100 }, { id: 'drainPerSecond', label: 'Drain Per Second', type: 'float', def: 5 }],
-  lines: [
-    { c: ['using UnityEngine;'] },
-    { c: ['using UnityEngine.UI;'], x: { zh: '引入 UI，才能用 Slider（滑动条）。', en: 'Brings in UI so we can use Slider.' } },
-    { c: ['using UnityEngine.InputSystem;'] },
-    { c: [''] },
-    { c: ['public class SurvivalStats : MonoBehaviour'], x: { zh: '生存数值：饥饿会慢慢下降，按 E 吃东西，血条（滑动条）跟着变。', en: 'Survival stats: hunger slowly drops, press E to eat, and the bar (a Slider) follows.' } },
-    { c: ['{'] },
-    { c: ['    public Slider hungerBar;'], err: 'noBar', x: { zh: '要显示饥饿的滑动条。在检查器里把层级里的滑动条拖进这一格。', en: 'The Slider that shows hunger. Drag the Slider from the Hierarchy into this slot in the Inspector.' } },
-    { c: ['    public float hunger = 100f;'], x: { zh: '现在的饥饿值，满是 100。', en: 'Current hunger, 100 is full.' } },
-    { c: ['    public float drainPerSecond = 5f;'], x: { zh: '每秒少多少。', en: 'How much it drops per second.' } },
-    { c: [''] },
-    { c: ['    void Update()'], run: 'update' },
-    { c: ['    {'], run: 'update' },
-    { c: ['        hunger -= drainPerSecond * Time.deltaTime;'], run: 'move', x: { zh: '每一帧扣一点。乘上 Time.deltaTime，变成「每秒扣 drainPerSecond」。', en: 'Takes a little off every frame. Multiplying by Time.deltaTime makes it “drainPerSecond per second”.' } },
-    { c: ['        hunger = Mathf.Clamp(hunger, 0f, 100f);'], run: 'update', x: { zh: '限制在 0 到 100 之间，不会变成负数。', en: 'Keeps it between 0 and 100 so it never goes negative.' } },
-    { c: [''], run: 'update' },
-    { c: ['        if (Keyboard.current.eKey.wasPressedThisFrame)'], run: 'update', key: 'KeyE', x: { zh: 'wasPressedThisFrame：只在按下的那一帧是 true，按住不放不会一直吃。', en: 'wasPressedThisFrame is true only on the frame the key goes down, so holding E does not keep eating.' } },
-    { c: ['            hunger = Mathf.Min(hunger + 30f, 100f);'], run: 'update', key: 'KeyE', x: { zh: '吃东西：加 30，最多 100。', en: 'Eat: add 30, up to 100.' } },
-    { c: [''], run: 'update' },
-    { c: ['        hungerBar.value = hunger / 100f;'], run: 'update', err: 'noBar', x: { zh: '滑动条的值是 0 到 1，所以除以 100。', en: "A Slider's value goes from 0 to 1, so divide by 100." } },
-    { c: ['    }'], run: 'update' },
-    { c: ['}'] }],
-};
-
 const DayNightCycle = {
   name: 'DayNightCycle', kind: 'daynight', blanks: [], answers: {}, compile: noBlanks,
   fields: [{ id: 'dayLengthSeconds', label: 'Day Length Seconds', type: 'float', def: 30 }],
@@ -193,31 +165,6 @@ const ItemData = {
     { c: ['    public int maxStack = 20;'], x: { zh: '一格最多几个。', en: 'How many fit in one slot.' } },
     { c: ['}'] }],
 };
-
-const Inventory = {
-  name: 'Inventory', kind: 'inventory', blanks: [], answers: {}, compile: noBlanks,
-  fields: [{ id: 'startItems', label: 'Start Items', type: 'assetlist', accept: 'itemdata', def: [] },
-           { id: 'listText', label: 'List Text', type: 'ref', accept: 'uitext', def: null }],
-  lines: [
-    { c: ['using UnityEngine;'] },
-    { c: ['using TMPro;'], x: { zh: '引入 TextMeshPro，才能改 UI 文本的字。', en: 'Brings in TextMeshPro so we can change UI text.' } },
-    { c: [''] },
-    { c: ['public class Inventory : MonoBehaviour'], x: { zh: '背包：开始时把带着的物品列出来。物品本身是 ItemData 数据文件，不写死在代码里。', en: 'Inventory: lists the starting items when Play begins. The items are ItemData files, not hard-coded in the script.' } },
-    { c: ['{'] },
-    { c: ['    public ItemData[] startItems;'], x: { zh: '方括号 [] 表示「一组」。在检查器里把物品数据一个个拖进来。', en: 'The [] means “a list”. Drag Item Data files into it in the Inspector.' } },
-    { c: ['    public TMP_Text listText;'], err: 'noText', x: { zh: '用来显示清单的 UI 文本。', en: 'The UI text that shows the list.' } },
-    { c: [''] },
-    { c: ['    void Start()'], run: 'start' },
-    { c: ['    {'], run: 'start' },
-    { c: ['        string text = "Inventory:";'], run: 'start' },
-    { c: ['        foreach (ItemData item in startItems)'], run: 'start', x: { zh: 'foreach：对清单里的每一个物品，都做一次下面这行。', en: 'foreach: do the next line once for every item in the list.' } },
-    { c: ['            text += "\\n- " + item.itemName;'], run: 'start', x: { zh: '\\n 是换行。把每个物品的名字接在后面。', en: '\\n is a line break. Adds each item name to the text.' } },
-    { c: ['        listText.text = text;'], run: 'start', err: 'noText', x: { zh: '把清单写到 UI 文本上。', en: 'Puts the list on the UI text.' } },
-    { c: ['        Debug.Log(text);'], run: 'start' },
-    { c: ['    }'], run: 'start' },
-    { c: ['}'] }],
-};
-
 
 // ---------- 第 1 章：恐怖游戏 ----------
 const LightFlicker = {
@@ -672,6 +619,381 @@ const PauseMenu = {
     { c: ['}'] }],
 };
 
+// ---------- 第 2 章：生存游戏 ----------
+// 共用：找场景里第一个某种脚本（FindFirstObjectByType）
+const dtBlank = (E, b, k, rt, after) => {
+  const d = val(b, k);
+  if (d === 'Time.deltaTime') rt[k] = 'dt';
+  else if (/^\d+(\.\d+)?[fF]?$/.test(d)) rt[k] = parseFloat(d);
+  else if (!d) E.push({ b: k, code: 'CS1525', en: `Invalid expression term '${after}'`, zh: '这里空着。要填 Time.deltaTime。' });
+  else { const mm = /^([A-Za-z_]\w*)(?:\.(\w*))?$/.exec(d);
+    if (mm && mm[1] !== 'Time') E.push({ b: k, code: 'CS0103', en: `The name '${mm[1]}' does not exist in the current context`, zh: `电脑不认识「${mm[1]}」。要写 Time.deltaTime（T 大写）。` });
+    else if (mm) E.push({ b: k, code: 'CS0117', en: `'Time' does not contain a definition for '${mm[2] || ''}'`, zh: `Time 里没有「${mm[2] || ''}」。要写 deltaTime。` });
+    else E.push({ b: k, code: 'CS1525', en: `Invalid expression term '${d}'`, zh: '这里要填 Time.deltaTime。' }); }
+};
+// || 或者、&& 而且：两个都能编译，但意思不一样（写错不会报错，游戏会表现奇怪）
+const opBlank = (E, b, k, rt) => {
+  const o = val(b, k);
+  if (o === '||' || o === '|') rt[k] = 'or'; else if (o === '&&' || o === '&') rt[k] = 'and';
+  else E.push({ b: k, code: 'CS1525', en: `Invalid expression term '${o || ')'}'`, zh: '这里要填一个逻辑符号：|| 是「或者」，&& 是「而且」。' });
+};
+const keyBlank = (E, b, k, rt, word) => {
+  const v = val(b, k), m = /^([a-z]+)Key$/.exec(v);
+  if (!v) E.push({ b: k, code: 'CS1001', en: 'Identifier expected', zh: `点号后面空着，要填 ${word}。` });
+  else if (!m) E.push({ b: k, code: 'CS1061', en: `'Keyboard' does not contain a definition for '${v}' and no accessible extension method '${v}' accepting a first argument of type 'Keyboard' could be found (are you missing a using directive or an assembly reference?)`, zh: `键盘没有「${v}」。要写 ${word}。` });
+  else rt.key = m[1].length === 1 ? 'Key' + m[1].toUpperCase() : m[1][0].toUpperCase() + m[1].slice(1);
+};
+
+const SurvivalStats = {
+  name: 'SurvivalStats', kind: 'survival',
+  fields: [{ id: 'hungerBar', label: 'Hunger Bar', type: 'ref', accept: 'uislider', def: null }, { id: 'thirstBar', label: 'Thirst Bar', type: 'ref', accept: 'uislider', def: null },
+           { id: 'healthBar', label: 'Health Bar', type: 'ref', accept: 'uislider', def: null },
+           { id: 'hunger', label: 'Hunger', type: 'float', def: 100 }, { id: 'thirst', label: 'Thirst', type: 'float', def: 100 }, { id: 'health', label: 'Health', type: 'float', def: 100 },
+           { id: 'hungerDrain', label: 'Hunger Drain', type: 'float', def: 0.5 }, { id: 'thirstDrain', label: 'Thirst Drain', type: 'float', def: 1 }, { id: 'damage', label: 'Damage', type: 'float', def: 5 }],
+  blanks: [
+    { id: 'dt', w: 14, tip: { zh: '每帧扣多少要乘上 Time.deltaTime，才变成「每秒」', en: 'Multiply by Time.deltaTime to make it “per second”' } },
+    { id: 'or', w: 2, tip: { zh: '「饿到 0 或者渴到 0」：或者要写 ||', en: '“hunger is 0 OR thirst is 0”: OR is written ||' } }],
+  answers: { dt: 'Time.deltaTime', or: '||' },
+  compile(b) { const E = [], rt = {}; dtBlank(E, b, 'dt', rt, ','); opBlank(E, b, 'or', rt); return { errors: E, rt }; },
+  lines: [
+    { c: ['using UnityEngine;'] },
+    { c: ['using UnityEngine.UI;'], x: { zh: '引入 UI，才能用 Slider（滑动条）。', en: 'Brings in UI so we can use Slider.' } },
+    { c: [''] },
+    { c: ['public class SurvivalStats : MonoBehaviour'], x: { zh: '生存数值：饥饿、口渴会慢慢下降；有一样降到 0 就开始掉血；血没了游戏结束。挂在 Player 上。', en: 'Survival stats: hunger and thirst slowly drop; if either hits 0 you lose health; at 0 health the game is over. Put it on Player.' } },
+    { c: ['{'] },
+    { c: ['    public Slider hungerBar;'], err: 'nohungerBar' },
+    { c: ['    public Slider thirstBar;'], err: 'nothirstBar' },
+    { c: ['    public Slider healthBar;'], err: 'nohealthBar' },
+    { c: ['    public float hunger = 100f;'] },
+    { c: ['    public float thirst = 100f;'] },
+    { c: ['    public float health = 100f;'] },
+    { c: ['    public float hungerDrain = 0.5f;'], x: { zh: '每秒少多少饥饿。', en: 'Hunger lost per second.' } },
+    { c: ['    public float thirstDrain = 1f;'], x: { zh: '每秒少多少口渴（渴得比饿得快）。', en: 'Thirst lost per second (you get thirsty faster than hungry).' } },
+    { c: ['    public float damage = 5f;'], x: { zh: '饿到或渴到 0 时，每秒掉多少血。', en: 'Health lost per second when starving or dehydrated.' } },
+    { c: [''] },
+    { c: ['    void Update()'], run: 'update' },
+    { c: ['    {'], run: 'update' },
+    { c: ['        hunger = Mathf.Max(hunger - hungerDrain * ', B('dt'), ', 0f);'], run: 'move', x: { zh: 'Mathf.Max(…, 0f)：最小只到 0，不会变成负数。', en: 'Mathf.Max(…, 0f): never goes below 0.' } },
+    { c: ['        thirst = Mathf.Max(thirst - thirstDrain * Time.deltaTime, 0f);'], run: 'move' },
+    { c: ['        if (hunger <= 0f ', B('or'), ' thirst <= 0f)'], run: 'update', x: { zh: '|| 是「或者」：只要有一样到 0 就成立。写成 &&（而且）也能编译，但要两样都到 0 才会掉血：不报错，只是游戏不对。', en: '|| means OR: true if either is 0. && (AND) also compiles but needs both at 0 — no error, the game just behaves wrong.' } },
+    { c: ['            health -= damage * Time.deltaTime;'], run: 'update' },
+    { c: [''], run: 'update' },
+    { c: ['        hungerBar.value = hunger / 100f;'], run: 'update', err: 'nohungerBar' },
+    { c: ['        thirstBar.value = thirst / 100f;'], run: 'update', err: 'nothirstBar' },
+    { c: ['        healthBar.value = health / 100f;'], run: 'update', err: 'nohealthBar' },
+    { c: [''], run: 'update' },
+    { c: ['        if (health <= 0f)'], run: 'update' },
+    { c: ['        {'], run: 'update' },
+    { c: ['            Debug.Log("Game Over");'], run: 'update' },
+    { c: ['            Time.timeScale = 0f;'], run: 'update' },
+    { c: ['        }'], run: 'update' },
+    { c: ['    }'], run: 'update' },
+    { c: [''] },
+    { c: ['    public void Eat(float amount)'], run: 'trigger', x: { zh: '别的脚本（例如灌木）会调用它。', en: 'Other scripts (like the bush) call this.' } },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        hunger = Mathf.Min(hunger + amount, 100f);'], run: 'trigger' },
+    { c: ['    }'], run: 'trigger' },
+    { c: [''] },
+    { c: ['    public void Drink(float amount)'], run: 'trigger' },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        thirst = Mathf.Min(thirst + amount, 100f);'], run: 'trigger' },
+    { c: ['    }'], run: 'trigger' },
+    { c: ['}'] }],
+};
+
+const DrinkWater = {
+  name: 'DrinkWater', kind: 'drink', interactable: true, deps: ['Interactable', 'SurvivalStats'], blanks: [], answers: {},
+  compile() { return { errors: needs(DrinkWater.lines, ['Interactable', 'SurvivalStats']), rt: {} }; },
+  fields: [{ id: 'promptText', label: 'Prompt Text', type: 'text', def: 'Press F to drink' }, { id: 'water', label: 'Water', type: 'float', def: 30 }],
+  lines: [
+    { c: ['using UnityEngine;'] },
+    { c: [''] },
+    { c: ['public class DrinkWater : Interactable'], x: { zh: '挂在海上：看着水按 F 就喝水。', en: 'Goes on the sea: look at the water and press F to drink.' } },
+    { c: ['{'] },
+    { c: ['    public float water = 30f;'] },
+    { c: [''] },
+    { c: ['    public override void Use()'], run: 'trigger' },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        SurvivalStats stats = FindFirstObjectByType<SurvivalStats>();'], run: 'trigger', x: { zh: '在场景里找到第一个 SurvivalStats（就是 Player 身上那个）。', en: 'Finds the first SurvivalStats in the scene (the one on Player).' } },
+    { c: ['        stats.Drink(water);'], run: 'trigger', err: 'noStats' },
+    { c: ['    }'], run: 'trigger' },
+    { c: ['}'] }],
+};
+
+const BerryBush = {
+  name: 'BerryBush', kind: 'eat', interactable: true, deps: ['Interactable', 'SurvivalStats'], blanks: [], answers: {},
+  compile() { return { errors: needs(BerryBush.lines, ['Interactable', 'SurvivalStats']), rt: {} }; },
+  fields: [{ id: 'promptText', label: 'Prompt Text', type: 'text', def: 'Press F to eat berries' }, { id: 'food', label: 'Food', type: 'float', def: 25 }],
+  lines: [
+    { c: ['using UnityEngine;'] },
+    { c: [''] },
+    { c: ['public class BerryBush : Interactable'], x: { zh: '挂在灌木上：按 F 吃莓果。', en: 'Goes on a bush: press F to eat berries.' } },
+    { c: ['{'] },
+    { c: ['    public float food = 25f;'] },
+    { c: [''] },
+    { c: ['    public override void Use()'], run: 'trigger' },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        FindFirstObjectByType<SurvivalStats>().Eat(food);'], run: 'trigger', err: 'noStats' },
+    { c: ['    }'], run: 'trigger' },
+    { c: ['}'] }],
+};
+
+const Inventory = {
+  name: 'Inventory', kind: 'inventory', deps: ['ItemData'],
+  fields: [{ id: 'panel', label: 'Panel', type: 'transform', go: true, def: null }, { id: 'listText', label: 'List Text', type: 'ref', accept: 'uitext', def: null }],
+  blanks: [{ id: 'tab', w: 6, tip: { zh: 'Tab 键：tabKey', en: 'The Tab key: tabKey' } }],
+  answers: { tab: 'tabKey' },
+  compile(b) { const E = [], rt = { key: 'Tab' }; keyBlank(E, b, 'tab', rt, 'tabKey'); return { errors: E.concat(needs(Inventory.lines, ['ItemData'])), rt }; },
+  lines: [
+    { c: ['using UnityEngine;'] },
+    { c: ['using UnityEngine.InputSystem;'] },
+    { c: ['using System.Collections.Generic;'], x: { zh: 'Dictionary（字典）在这里面。', en: 'Dictionary lives here.' } },
+    { c: ['using TMPro;'] },
+    { c: [''] },
+    { c: ['public class Inventory : MonoBehaviour'], x: { zh: '背包：记住每样物品有几个。按 Tab 打开 / 关上背包面板。挂在 Player 上。', en: 'The backpack: remembers how many of each item you have. Tab opens and closes the panel. Put it on Player.' } },
+    { c: ['{'] },
+    { c: ['    public GameObject panel;'], err: 'noPanel' },
+    { c: ['    public TMP_Text listText;'], err: 'noList' },
+    { c: ['    Dictionary<ItemData, int> items = new Dictionary<ItemData, int>();'], x: { zh: '字典：用「物品」查「数量」。例如 Stick → 2。', en: 'A dictionary: look up a count by item, e.g. Stick → 2.' } },
+    { c: [''] },
+    { c: ['    public void Add(ItemData item, int amount)'], run: 'trigger' },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        items[item] = Count(item) + amount;'], run: 'trigger' },
+    { c: ['        Refresh();'], run: 'trigger' },
+    { c: ['    }'], run: 'trigger' },
+    { c: [''] },
+    { c: ['    public void Remove(ItemData item, int amount)'], run: 'trigger' },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        items[item] = Count(item) - amount;'], run: 'trigger' },
+    { c: ['        Refresh();'], run: 'trigger' },
+    { c: ['    }'], run: 'trigger' },
+    { c: [''] },
+    { c: ['    public int Count(ItemData item)'] },
+    { c: ['    {'] },
+    { c: ['        return items.ContainsKey(item) ? items[item] : 0;'], x: { zh: '有这样东西就回答数量，没有就回答 0。? : 是「如果…就…不然…」。', en: 'Return the count if we have it, otherwise 0. ? : means “if … then … else …”.' } },
+    { c: ['    }'] },
+    { c: [''] },
+    { c: ['    void Update()'], run: 'update' },
+    { c: ['    {'], run: 'update' },
+    { c: ['        if (Keyboard.current.', B('tab'), '.wasPressedThisFrame)'], run: 'update', key: 'Tab' },
+    { c: ['        {'], run: 'update', key: 'Tab' },
+    { c: ['            panel.SetActive(!panel.activeSelf);'], run: 'update', key: 'Tab', err: 'noPanel', x: { zh: '! 是「相反」：开着就关，关着就开。', en: '! means “the opposite”: open becomes closed and closed becomes open.' } },
+    { c: ['            Cursor.lockState = panel.activeSelf ? CursorLockMode.None : CursorLockMode.Locked;'], run: 'update', key: 'Tab', x: { zh: '背包开着就放开鼠标（才能点按钮），关上就锁回去（继续转头）。', en: 'Free the mouse while the backpack is open (so you can click), lock it again when closed (to look around).' } },
+    { c: ['        }'], run: 'update', key: 'Tab' },
+    { c: ['    }'], run: 'update' },
+    { c: [''] },
+    { c: ['    void Refresh()'], run: 'trigger' },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        string text = "";'], run: 'trigger' },
+    { c: ['        foreach (var pair in items)'], run: 'trigger' },
+    { c: ['            if (pair.Value > 0) text += pair.Key.itemName + " x" + pair.Value + "\\n";'], run: 'trigger' },
+    { c: ['        listText.text = text;'], run: 'trigger', err: 'noList' },
+    { c: ['    }'], run: 'trigger' },
+    { c: ['}'] }],
+};
+
+const ItemPickup = {
+  name: 'ItemPickup', kind: 'pickupItem', interactable: true, deps: ['Interactable', 'Inventory', 'ItemData'], blanks: [], answers: {},
+  compile() { return { errors: needs(ItemPickup.lines, ['Interactable', 'Inventory', 'ItemData']), rt: {} }; },
+  fields: [{ id: 'promptText', label: 'Prompt Text', type: 'text', def: 'Press F to pick up' }, { id: 'item', label: 'Item', type: 'aref', accept: 'itemdata', def: null }, { id: 'amount', label: 'Amount', type: 'float', def: 1 }],
+  lines: [
+    { c: ['using UnityEngine;'] },
+    { c: [''] },
+    { c: ['public class ItemPickup : Interactable'], x: { zh: '地上可以捡的东西：按 F 放进背包。Item 格子放它是哪一种物品。', en: 'Something on the ground you can pick up: press F to put it in the backpack. The Item slot says which item it is.' } },
+    { c: ['{'] },
+    { c: ['    public ItemData item;'], x: { zh: '把项目窗口里的物品数据（例如 Stick）拖进这一格。', en: 'Drag an Item Data file (like Stick) from the Project window into this slot.' } },
+    { c: ['    public int amount = 1;'] },
+    { c: [''] },
+    { c: ['    public override void Use()'], run: 'trigger' },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        FindFirstObjectByType<Inventory>().Add(item, amount);'], run: 'trigger', err: 'noInv' },
+    { c: ['        gameObject.SetActive(false);'], run: 'trigger' },
+    { c: ['    }'], run: 'trigger' },
+    { c: ['}'] }],
+};
+
+const Crafting = {
+  name: 'Crafting', kind: 'craft', methods: ['CraftAxe'], deps: ['Inventory', 'ItemData'],
+  fields: [{ id: 'stick', label: 'Stick', type: 'aref', accept: 'itemdata', def: null }, { id: 'stone', label: 'Stone', type: 'aref', accept: 'itemdata', def: null }, { id: 'axe', label: 'Axe', type: 'aref', accept: 'itemdata', def: null }],
+  blanks: [{ id: 'and', w: 2, tip: { zh: '「树枝够了而且石头也够了」：而且要写 &&', en: '“enough sticks AND enough stones”: AND is written &&' } }],
+  answers: { and: '&&' },
+  compile(b) { const E = [], rt = {}; opBlank(E, b, 'and', rt); return { errors: E.concat(needs(Crafting.lines, ['Inventory', 'ItemData'])), rt }; },
+  lines: [
+    { c: ['using UnityEngine;'] },
+    { c: [''] },
+    { c: ['public class Crafting : MonoBehaviour'], x: { zh: '合成：材料够就扣掉材料、做出新东西。挂在 Player 上，背包里的按钮调用 CraftAxe。', en: 'Crafting: if you have the materials, use them up and make something new. Put it on Player; the backpack button calls CraftAxe.' } },
+    { c: ['{'] },
+    { c: ['    public ItemData stick;'] },
+    { c: ['    public ItemData stone;'] },
+    { c: ['    public ItemData axe;'] },
+    { c: ['    Inventory inventory;'] },
+    { c: [''] },
+    { c: ['    void Start()'], run: 'start' },
+    { c: ['    {'], run: 'start' },
+    { c: ['        inventory = GetComponent<Inventory>();'], run: 'start', x: { zh: '同一个物体（Player）上的背包。', en: 'The Inventory on the same object (Player).' } },
+    { c: ['    }'], run: 'start' },
+    { c: [''] },
+    { c: ['    public void CraftAxe()'], run: 'trigger' },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        if (inventory.Count(stick) >= 2 ', B('and'), ' inventory.Count(stone) >= 1)'], run: 'trigger', err: 'noInv', x: { zh: '&& 是「而且」：两个都成立才行。写成 ||（或者）也能编译，但只有树枝也能做出斧头。', en: '&& means AND: both must be true. || (OR) also compiles, but then sticks alone would make an axe.' } },
+    { c: ['        {'], run: 'trigger' },
+    { c: ['            inventory.Remove(stick, 2);'], run: 'trigger' },
+    { c: ['            inventory.Remove(stone, 1);'], run: 'trigger' },
+    { c: ['            inventory.Add(axe, 1);'], run: 'trigger' },
+    { c: ['            Debug.Log("Crafted an axe!");'], run: 'trigger' },
+    { c: ['        }'], run: 'trigger' },
+    { c: ['        else Debug.Log("Not enough materials");'], run: 'trigger' },
+    { c: ['    }'], run: 'trigger' },
+    { c: ['}'] }],
+};
+
+const ChopTree = {
+  name: 'ChopTree', kind: 'chop', interactable: true, deps: ['Interactable', 'Inventory', 'ItemData'], blanks: [], answers: {},
+  compile() { return { errors: needs(ChopTree.lines, ['Interactable', 'Inventory', 'ItemData']), rt: {} }; },
+  fields: [{ id: 'promptText', label: 'Prompt Text', type: 'text', def: 'Press F to chop' }, { id: 'needText', label: 'Need Text', type: 'text', def: 'You need an axe' },
+           { id: 'axe', label: 'Axe', type: 'aref', accept: 'itemdata', def: null }, { id: 'wood', label: 'Wood', type: 'aref', accept: 'itemdata', def: null }, { id: 'woodAmount', label: 'Wood Amount', type: 'float', def: 3 }],
+  lines: [
+    { c: ['using UnityEngine;'] },
+    { c: ['using System.Collections;'] },
+    { c: [''] },
+    { c: ['public class ChopTree : Interactable'], x: { zh: '挂在树上：有斧头才能砍。砍了得到木头，树慢慢倒下再消失（协程）。', en: 'Goes on a tree: you need an axe. Chopping gives wood, and the tree falls over then disappears (a coroutine).' } },
+    { c: ['{'] },
+    { c: ['    public string needText = "You need an axe";'] },
+    { c: ['    public ItemData axe;'] },
+    { c: ['    public ItemData wood;'] },
+    { c: ['    public int woodAmount = 3;'] },
+    { c: [''] },
+    { c: ['    public override void Use()'], run: 'trigger' },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        Inventory inventory = FindFirstObjectByType<Inventory>();'], run: 'trigger' },
+    { c: ['        if (inventory.Count(axe) < 1)'], run: 'trigger', err: 'noInv' },
+    { c: ['        {'], run: 'trigger' },
+    { c: ['            promptText = needText;'], run: 'trigger' },
+    { c: ['            return;'], run: 'trigger' },
+    { c: ['        }'], run: 'trigger' },
+    { c: ['        inventory.Add(wood, woodAmount);'], run: 'trigger' },
+    { c: ['        StartCoroutine(Fall());'], run: 'trigger' },
+    { c: ['    }'], run: 'trigger' },
+    { c: [''] },
+    { c: ['    IEnumerator Fall()'], x: { zh: '协程：一帧一帧把树转倒，转完再藏起来。', en: 'A coroutine: tip the tree over frame by frame, then hide it.' } },
+    { c: ['    {'] },
+    { c: ['        for (float t = 0f; t < 1f; t += Time.deltaTime)'], run: 'move', x: { zh: 'for 循环：t 从 0 慢慢加到 1，大约 1 秒。', en: 'A for loop: t climbs from 0 to 1 over about a second.' } },
+    { c: ['        {'], run: 'move' },
+    { c: ['            transform.rotation = Quaternion.Euler(t * 90f, 0f, 0f);'], run: 'move' },
+    { c: ['            yield return null;'], run: 'move' },
+    { c: ['        }'], run: 'move' },
+    { c: ['        gameObject.SetActive(false);'] },
+    { c: ['    }'] },
+    { c: ['}'] }],
+};
+
+const Campfire = {
+  name: 'Campfire', kind: 'campfire', interactable: true, deps: ['Interactable', 'Inventory', 'ItemData'], blanks: [], answers: {},
+  compile() { return { errors: needs(Campfire.lines, ['Interactable', 'Inventory', 'ItemData']), rt: {} }; },
+  fields: [{ id: 'promptText', label: 'Prompt Text', type: 'text', def: 'Press F to light the fire (3 Wood)' }, { id: 'needText', label: 'Need Text', type: 'text', def: 'You need 3 Wood' },
+           { id: 'wood', label: 'Wood', type: 'aref', accept: 'itemdata', def: null }, { id: 'fire', label: 'Fire', type: 'transform', go: true, def: null },
+           { id: 'fireLight', label: 'Fire Light', type: 'ref', accept: 'light', def: null }, { id: 'woodNeeded', label: 'Wood Needed', type: 'float', def: 3 }],
+  lines: [
+    { c: ['using UnityEngine;'] },
+    { c: [''] },
+    { c: ['public class Campfire : Interactable'], x: { zh: '挂在营火底座上：有 3 块木头才能生火。生火 = 打开火焰粒子和火光。', en: 'Goes on the campfire base: you need 3 Wood. Lighting it switches on the flame particles and the firelight.' } },
+    { c: ['{'] },
+    { c: ['    public string needText = "You need 3 Wood";'] },
+    { c: ['    public ItemData wood;'] },
+    { c: ['    public GameObject fire;'], err: 'noFire' },
+    { c: ['    public Light fireLight;'], err: 'noFireLight' },
+    { c: ['    public int woodNeeded = 3;'] },
+    { c: ['    bool lit;'] },
+    { c: [''] },
+    { c: ['    public override void Use()'], run: 'trigger' },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        if (lit) return;'], run: 'trigger' },
+    { c: ['        Inventory inventory = FindFirstObjectByType<Inventory>();'], run: 'trigger' },
+    { c: ['        if (inventory.Count(wood) < woodNeeded)'], run: 'trigger', err: 'noInv' },
+    { c: ['        {'], run: 'trigger' },
+    { c: ['            promptText = needText;'], run: 'trigger' },
+    { c: ['            return;'], run: 'trigger' },
+    { c: ['        }'], run: 'trigger' },
+    { c: ['        inventory.Remove(wood, woodNeeded);'], run: 'trigger' },
+    { c: ['        fire.SetActive(true);'], run: 'trigger', err: 'noFire' },
+    { c: ['        fireLight.enabled = true;'], run: 'trigger', err: 'noFireLight' },
+    { c: ['        lit = true;'], run: 'trigger' },
+    { c: ['        promptText = "";'], run: 'trigger' },
+    { c: ['    }'], run: 'trigger' },
+    { c: ['}'] }],
+};
+
+const SaveGame = {
+  name: 'SaveGame', kind: 'savegame', deps: ['SurvivalStats', 'Inventory', 'ItemData'],
+  fields: [{ id: 'items', label: 'Items', type: 'assetlist', accept: 'itemdata', def: [] }],
+  blanks: [
+    { id: 'set', w: 8, tip: { zh: '存一个小数：SetFloat', en: 'Save a decimal number: SetFloat' } },
+    { id: 'get', w: 8, tip: { zh: '读一个小数：GetFloat', en: 'Read a decimal number: GetFloat' } }],
+  answers: { set: 'SetFloat', get: 'GetFloat' },
+  compile(b) {
+    const E = [];
+    for (const [k, want, zh] of [['set', 'SetFloat', '存小数要写 SetFloat'], ['get', 'GetFloat', '读小数要写 GetFloat']]) {
+      const v = val(b, k);
+      if (!v) E.push({ b: k, code: 'CS1001', en: 'Identifier expected', zh: `点号后面空着。${zh}。` });
+      else if (v !== want) E.push({ b: k, code: 'CS0117', en: `'PlayerPrefs' does not contain a definition for '${v}'`, zh: `PlayerPrefs 没有「${v}」。${zh}（大小写要对）。` });
+    }
+    return { errors: E.concat(needs(SaveGame.lines, ['SurvivalStats', 'Inventory', 'ItemData'])), rt: {} };
+  },
+  lines: [
+    { c: ['using UnityEngine;'] },
+    { c: ['using UnityEngine.InputSystem;'] },
+    { c: [''] },
+    { c: ['public class SaveGame : MonoBehaviour'], x: { zh: '存档：按 K 存下位置、数值和背包，按 L 读回来。挂在 Player 上。关掉 app 再打开也还在。', en: 'Saving: K saves your position, stats and backpack; L loads them back. Put it on Player. It survives closing the app.' } },
+    { c: ['{'] },
+    { c: ['    public ItemData[] items;'], x: { zh: '要存哪些物品：把物品数据一个个拖进来。', en: 'Which items to save: drag the Item Data files in.' } },
+    { c: ['    SurvivalStats stats;'] },
+    { c: ['    Inventory inventory;'] },
+    { c: [''] },
+    { c: ['    void Start()'], run: 'start' },
+    { c: ['    {'], run: 'start' },
+    { c: ['        stats = GetComponent<SurvivalStats>();'], run: 'start' },
+    { c: ['        inventory = GetComponent<Inventory>();'], run: 'start' },
+    { c: ['    }'], run: 'start' },
+    { c: [''] },
+    { c: ['    void Update()'], run: 'update' },
+    { c: ['    {'], run: 'update' },
+    { c: ['        if (Keyboard.current.kKey.wasPressedThisFrame) Save();'], run: 'update', key: 'KeyK' },
+    { c: ['        if (Keyboard.current.lKey.wasPressedThisFrame) Load();'], run: 'update', key: 'KeyL' },
+    { c: ['    }'], run: 'update' },
+    { c: [''] },
+    { c: ['    void Save()'], run: 'trigger' },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        PlayerPrefs.SetFloat("x", transform.position.x);'], run: 'trigger' },
+    { c: ['        PlayerPrefs.SetFloat("z", transform.position.z);'], run: 'trigger' },
+    { c: ['        PlayerPrefs.', B('set'), '("hunger", stats.hunger);'], run: 'trigger', err: 'noStats', x: { zh: 'PlayerPrefs 用名字（键）存数字：SetFloat 存小数，SetInt 存整数。', en: 'PlayerPrefs stores numbers by name (key): SetFloat for decimals, SetInt for whole numbers.' } },
+    { c: ['        PlayerPrefs.SetFloat("thirst", stats.thirst);'], run: 'trigger' },
+    { c: ['        PlayerPrefs.SetFloat("health", stats.health);'], run: 'trigger' },
+    { c: ['        foreach (ItemData item in items)'], run: 'trigger' },
+    { c: ['            PlayerPrefs.SetInt(item.itemName, inventory.Count(item));'], run: 'trigger', err: 'noInv', x: { zh: '每样物品用它的名字当键，存数量。', en: 'Each item’s count is saved under its name.' } },
+    { c: ['        PlayerPrefs.Save();'], run: 'trigger' },
+    { c: ['        Debug.Log("Saved");'], run: 'trigger' },
+    { c: ['    }'], run: 'trigger' },
+    { c: [''] },
+    { c: ['    void Load()'], run: 'trigger' },
+    { c: ['    {'], run: 'trigger' },
+    { c: ['        CharacterController controller = GetComponent<CharacterController>();'], run: 'trigger' },
+    { c: ['        controller.enabled = false;'], run: 'trigger', x: { zh: '先关掉角色控制器再搬位置，不然它会把你拉回原地。', en: 'Turn the Character Controller off before moving, or it pulls you back.' } },
+    { c: ['        transform.position = new Vector3(PlayerPrefs.GetFloat("x"), transform.position.y, PlayerPrefs.GetFloat("z"));'], run: 'trigger' },
+    { c: ['        controller.enabled = true;'], run: 'trigger' },
+    { c: ['        stats.hunger = PlayerPrefs.', B('get'), '("hunger", 100f);'], run: 'trigger', err: 'noStats', x: { zh: '后面的 100f 是「没存过的话用 100」。', en: 'The 100f means “use 100 if nothing was saved”.' } },
+    { c: ['        stats.thirst = PlayerPrefs.GetFloat("thirst", 100f);'], run: 'trigger' },
+    { c: ['        stats.health = PlayerPrefs.GetFloat("health", 100f);'], run: 'trigger' },
+    { c: ['        foreach (ItemData item in items)'], run: 'trigger' },
+    { c: ['        {'], run: 'trigger' },
+    { c: ['            inventory.Remove(item, inventory.Count(item));'], run: 'trigger' },
+    { c: ['            inventory.Add(item, PlayerPrefs.GetInt(item.itemName, 0));'], run: 'trigger' },
+    { c: ['        }'], run: 'trigger' },
+    { c: ['        Debug.Log("Loaded");'], run: 'trigger' },
+    { c: ['    }'], run: 'trigger' },
+    { c: ['}'] }],
+};
+
 ZTG.scriptLib = { FirstPersonMove, EnemyChase, SurvivalStats, DayNightCycle, SaveLoad, ItemData, Inventory, LightFlicker, Footsteps, DoorOpen, CatchPlayer, ExitZone,
-  Interactable, Interact, FlashlightPickup, KeyPickup, LockedDoor, Jumpscare, MainMenu, PauseMenu };
+  Interactable, Interact, FlashlightPickup, KeyPickup, LockedDoor, Jumpscare, MainMenu, PauseMenu,
+  DrinkWater, BerryBush, ItemPickup, Crafting, ChopTree, Campfire, SaveGame };
 })();

@@ -245,6 +245,17 @@ zh: {
   lSceneLoaded:n=>`SceneManager.LoadScene：打开了场景 ${n}`, lQuitIgnored:'[模拟器提示] Application.Quit 在编辑器里不会关掉游戏，只有打包出来的游戏才会关掉。',
   uiPanel:'面板（Panel）', nPanel:'面板', a_stretch:'铺满（Stretch）', alphaL:'透明度（A，0 到 1）', alignL:'对齐', al_left:'靠左', al_center:'居中',
   normalColor:'普通颜色（Normal Color）', hlColor:'鼠标移上去的颜色（Highlighted Color）', ocFunc:'要调用的方法', ocEmpty:'列表是空的。点 + 加一项。', ocAdd:'添加一项',
+
+  // 第 2 章：生存游戏 + 粒子系统
+  ch2desc:n=>`荒岛求生：饥饿、口渴、采集、合成斧头、砍树、营火（粒子特效）、昼夜和存档。${n} 步，约 70 分钟。`,
+  bugsCard2:'小岛坏掉了，把 4 个问题找出来修好。',
+  nPS:'粒子系统', effectsM:'特效（Effects）', psM:'粒子系统（Particle System）', psComp:'粒子系统（Particle System）', psMain:'主模块（Main）',
+  psLoop:'循环（Looping）', psDuration:'持续时间（Duration）', psLifetime:'粒子寿命（Start Lifetime）', psSpeed:'初始速度（Start Speed）', psSize:'粒子大小（Start Size）',
+  psColor:'粒子颜色（Start Color）', psGravity:'重力（Gravity Modifier）', psEmission:'发射（Emission）', psRate:'每秒发射数（Rate over Time）', psShape:'形状：圆锥（Shape: Cone）',
+  psAngle:'角度（Angle）', psRadius:'半径（Radius）', psColorLife:'生命周期颜色（Color over Lifetime）', psFade:'越来越暗，最后消失',
+  dropAsset:'把项目窗口里的物品数据拖到这里',
+  lArgNull:'ArgumentNullException: Value cannot be null. Parameter name: key 格子里没有放物品数据（Item Data）。',
+  whyNoInv:'场景里找不到 Inventory（背包）脚本。它要挂在 Player 上。', whyNoStats:'找不到 SurvivalStats 脚本。它要挂在 Player 上。',
 },
 en: {
   appTitle:'Zero to Game',
@@ -480,6 +491,17 @@ en: {
   lSceneLoaded:n=>`SceneManager.LoadScene: opened scene ${n}`, lQuitIgnored:'[Simulator] Application.Quit does nothing in the editor; it only quits a built game.',
   uiPanel:'Panel', nPanel:'Panel', a_stretch:'Stretch', alphaL:'Alpha (A, 0 to 1)', alignL:'Alignment', al_left:'Left', al_center:'Center',
   normalColor:'Normal Color', hlColor:'Highlighted Color', ocFunc:'Function to call', ocEmpty:'The list is empty. Click + to add an entry.', ocAdd:'Add entry',
+
+  // Chapter 2: survival + particle systems
+  ch2desc:n=>`Survive on an island: hunger, thirst, gathering, crafting an axe, chopping trees, a campfire (particle effects), day and night, and saving. ${n} steps, about 70 minutes.`,
+  bugsCard2:'The island is broken. Find and fix all 4 problems.',
+  nPS:'Particle System', effectsM:'Effects', psM:'Particle System', psComp:'Particle System', psMain:'Main',
+  psLoop:'Looping', psDuration:'Duration', psLifetime:'Start Lifetime', psSpeed:'Start Speed', psSize:'Start Size',
+  psColor:'Start Color', psGravity:'Gravity Modifier', psEmission:'Emission', psRate:'Rate over Time', psShape:'Shape: Cone',
+  psAngle:'Angle', psRadius:'Radius', psColorLife:'Color over Lifetime', psFade:'Fade out over its lifetime',
+  dropAsset:'Drag an Item Data file from the Project window here',
+  lArgNull:'ArgumentNullException: Value cannot be null. Parameter name: key',
+  whyNoInv:'', whyNoStats:'',
 },
 };
 
@@ -542,6 +564,8 @@ const TERMS = {
   timeScale:{zh:['Time.timeScale'],en:['Time.timeScale'],t:{zh:'游戏时间的速度。0 = 停住（暂停），1 = 正常。换场景也不会自己变回 1。',en:'The speed of game time. 0 freezes it (pause), 1 is normal. It does not reset when the scene changes.'}},
   onClick:{zh:['On Click'],en:['On Click'],t:{zh:'按钮被点一下时要做的事：拖一个物体进去，再选它脚本上的一个 public 方法。',en:'What a button does when clicked: drag an object in, then choose a public method from its scripts.'}},
   eventSystem:{zh:['事件系统','EventSystem'],en:['EventSystem','Event System'],t:{zh:'让 UI 能被点击的物体。建第一个 UI 时 Unity 会自动建一个；删掉了，按钮就点不动。',en:'The object that lets UI be clicked. Unity adds one with your first UI element; delete it and buttons stop responding.'}},
+  particles:{zh:['粒子系统','粒子'],en:['Particle System','particles'],t:{zh:'一下子喷出很多小点（粒子），用来做火、烟、火星、雨。每个粒子有寿命、速度、大小、颜色。',en:'Emits lots of tiny dots (particles) for fire, smoke, sparks or rain. Each particle has a lifetime, speed, size and color.'}},
+  dictionary:{zh:['Dictionary','字典'],en:['Dictionary'],t:{zh:'用「钥匙」查「值」的表，例如用物品查数量：Stick → 2。',en:'A table that looks up a value by a key, e.g. an item’s count: Stick → 2.'}},
   nullRef:{zh:['NullReferenceException'],en:['NullReferenceException'],t:{zh:'最常见的报错：代码想用一个东西，但它是空的（null）。通常是组件没加，或者检查器里的格子没拖东西进去。',en:"The most common error: the code tries to use something that is empty (null). Usually a component is missing or an Inspector slot is empty."}},
 };
 G.terms = TERMS;
