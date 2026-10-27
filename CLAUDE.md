@@ -66,6 +66,7 @@ app/scripts.js        内置 C# 脚本模板：FirstPersonMove（3 个空）、E
                       第 2 章：SurvivalStats（2 个空，饥饿 / 口渴 / 血量）、Inventory（1 个空，字典 + Tab）、DrinkWater、BerryBush、ItemPickup、
                       Crafting（1 个空，&&）、ChopTree、Campfire、SaveGame（2 个空）（PlayerMove 在 ch0.js）
 app/chapters/ch2.js    第 2 章（生存游戏）：setup 是空小岛 + 做好的第一人称玩家（会走路、会按 F 互动）；18 个 STEPS、BUGS、QUIZ、导出说明
+app/chapters/ch3.js    第 3 章（沙盒游戏，制作中）：setup 是沙滩 / 土地 / 城市地图 + 做好的第一人称玩家；现在只有「准备」3 步
 app/chapters/chmenu.js 菜单课：setup 用第 1 章下篇做完的走廊；13 个 STEPS（MainMenu 场景 + 暂停菜单）、BUGS、QUIZ、导出说明
 app/chapters/ch1b.js  第 1 章下篇：setup 用第 1 章每一步的 auto 搭好走廊（怪物先关掉），14 个 STEPS、BUGS、QUIZ、导出说明
 app/audio.js          声音：Footstep、Drone、Growl、Scream 都用代码合成（Web Audio），不用下载；ZTG.audio.play() 返回可改音量 / 左右的句柄
@@ -80,7 +81,7 @@ scripts/smoke.js      冒烟测试：打开 app，截主页和编辑器两张图
 
 ### 关键部分
 
-脚本按 `i18n.js` → `vendor/three.js` → `scripts.js` → `props.js` → `audio.js` → `chapters/ch0.js` → `chapters/ch1.js` → `chapters/ch1b.js` → `chapters/chmenu.js` → `chapters/ch2.js` → `editor.js` 的顺序加载（普通 `<script>`，不用 ES module：`file://` 下 module 容易被 CORS 挡）。它们通过全局命名空间 `window.ZTG` 互相访问：`editor.js` 把 `S`（getter）、`mkObj`、`select`、`P`、`FL` 等挂到 `ZTG` 上，章节文件里的函数用 `G.xxx` 在调用时读取。
+脚本按 `i18n.js` → `vendor/three.js` → `scripts.js` → `props.js` → `audio.js` → `chapters/ch0.js` → `chapters/ch1.js` → `chapters/ch1b.js` → `chapters/chmenu.js` → `chapters/ch2.js` → `chapters/ch3.js` → `editor.js` 的顺序加载（普通 `<script>`，不用 ES module：`file://` 下 module 容易被 CORS 挡）。它们通过全局命名空间 `window.ZTG` 互相访问：`editor.js` 把 `S`（getter）、`mkObj`、`select`、`P`、`FL` 等挂到 `ZTG` 上，章节文件里的函数用 `G.xxx` 在调用时读取。
 
 - **语言**：`ZTG.t(key, ...参数)` 取界面文字；`ZTG.L({zh, en})` 取章节文字。找不到 key 会 `console.error`，冒烟测试会因此失败。Console 日志存的是 key + 参数，切换语言后旧日志也会跟着变。切换语言时，没改过名字的默认物体（主摄像机 ↔ Main Camera 等）一起改名。
 - **状态 `S`**：`objs`（场景物体）、`assets`（Project 文件）、`prefabs`、`sel`（当前选中）、`tool`（q/w/e/r）、`tab`（scene/game）、`step`（教练步骤）、`playing`、`flags`（教练用的进度标记）。`init()` 建初始场景。
@@ -187,7 +188,9 @@ xvfb-run -a -s "-screen 0 1600x1000x24" npx electron --no-sandbox --disable-gpu 
 6. ~~第 1 章下篇~~（已完成 2026-10-25）：按 F 互动、钥匙和锁着的门、动画窗口 + Animator、Jumpscare。发起人确认：放在新的一章、用真的 Animation + Animator。
 7. ~~菜单课~~（已完成 2026-10-25）：主菜单场景（开始 / 退出按钮，SceneManager.LoadScene，File → Build Profiles → Scene List）+ 游戏里按 Esc 的暂停菜单（Time.timeScale）。
 8. ~~第 2 章：生存游戏~~（已完成 2026-10-26）：发起人确认开场是空小岛 + 做好的玩家，营火要做粒子系统。
-9. **第 3 章：沙盒游戏**（网格建造）。先列出步骤大纲给发起人确认。
+9. **第 3 章：沙盒游戏**（网格建造）。发起人确认的大纲（2026-10-26）：第一人称、像 Minecraft 但不是像素风；开场是做好的地图（沙滩、土地、城市，平地，只在上面盖）+ 做好的玩家；4 种方块（土、沙、砖、玻璃）；存档用 JSON；15 步。
+   - 已完成「一、准备」3 步（2026-10-26）：四种方块、透明的玻璃（材质 Surface Type + Alpha）、标签 Block（Tag → Add Tag…，`S.tags`）和预制件（预制件记住 tag，项目窗口选预制件可以改 Tag）。
+   - 还没做：瞄准和网格（射线 + `Mathf.Floor` + `hit.normal`，预览方块要移除碰撞体）、左键放（Instantiate）、右键拆（CompareTag + Destroy）、不能放在自己身上（Physics.CheckBox）、按 1-4 换方块（数组）、快捷栏 UI、放下的灰尘（粒子爆发 + Stop Action Destroy）、PlayOneShot 声音、美化、JSON 存档（JsonUtility + File）、盖房子。计划把 BuildSystem 做成一个「分版本」的脚本：每一步在代码窗口点「加入这一步的代码」，新的几行出现，只填空。
 10. 发布新版本：发起人决定 v0.1.0 先保留（2026-10-26），要发布时再在最新的 main 上推新的版本号 tag，确认 Actions 产出三个平台的安装包。
 
 做任何会改变课程内容或方向的决定（章节顺序、步骤内容、换渲染技术）之前，先问发起人。

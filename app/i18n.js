@@ -256,6 +256,13 @@ zh: {
   dropAsset:'把项目窗口里的物品数据拖到这里',
   lArgNull:'ArgumentNullException: Value cannot be null. Parameter name: key 格子里没有放物品数据（Item Data）。',
   whyNoInv:'场景里找不到 Inventory（背包）脚本。它要挂在 Player 上。', whyNoStats:'找不到 SurvivalStats 脚本。它要挂在 Player 上。',
+  // 第 3 章：沙盒游戏（透明材质、标签）
+  ch3desc:n=>`像 Minecraft 一样盖房子（制作中）：现在有开场地图和前 ${n} 步：四种方块、透明的玻璃、标签和预制件。瞄准、放置、拆除会陆续加上。`,
+  bugsCard3:'方块坏掉了，把问题找出来修好。',
+  surfaceType:'表面类型（Surface Type）', sf_opaque:'不透明（Opaque）', sf_transparent:'透明（Transparent）',
+  addTagOpt:'Add Tag…（添加标签）', tagsT:'标签和层（Tags and Layers）', tagsM:'项目设置：标签和层…', tagsEmpty:'还没有自己加的标签。',
+  newTagL:'新标签的名字', addTagBtn:'添加', tagsNote:b=>`内置的标签（${b}）不用加，也不能改。新标签加好以后，回到物体的检查器，在 Tag 下拉里选它。`,
+  tagExists:n=>`已经有叫「${n}」的标签了`, lTagAdded:n=>`添加了标签 ${n}`,
 },
 en: {
   appTitle:'Zero to Game',
@@ -502,6 +509,13 @@ en: {
   dropAsset:'Drag an Item Data file from the Project window here',
   lArgNull:'ArgumentNullException: Value cannot be null. Parameter name: key',
   whyNoInv:'', whyNoStats:'',
+  // Chapter 3: sandbox (transparent materials, tags)
+  ch3desc:n=>`Build like Minecraft (in progress): the starting map and the first ${n} steps — four kinds of blocks, see-through glass, tags and prefabs. Aiming, placing and removing are coming next.`,
+  bugsCard3:'The blocks are broken. Find and fix the problems.',
+  surfaceType:'Surface Type', sf_opaque:'Opaque', sf_transparent:'Transparent',
+  addTagOpt:'Add Tag…', tagsT:'Tags and Layers', tagsM:'Project Settings: Tags and Layers…', tagsEmpty:'No tags of your own yet.',
+  newTagL:'New tag name', addTagBtn:'Add', tagsNote:b=>`The built-in tags (${b}) are always there and can’t be changed. After adding a tag, go back to the object’s Inspector and pick it from the Tag dropdown.`,
+  tagExists:n=>`There is already a tag called “${n}”`, lTagAdded:n=>`Added tag ${n}`,
 },
 };
 
@@ -566,6 +580,7 @@ const TERMS = {
   eventSystem:{zh:['事件系统','EventSystem'],en:['EventSystem','Event System'],t:{zh:'让 UI 能被点击的物体。建第一个 UI 时 Unity 会自动建一个；删掉了，按钮就点不动。',en:'The object that lets UI be clicked. Unity adds one with your first UI element; delete it and buttons stop responding.'}},
   particles:{zh:['粒子系统','粒子'],en:['Particle System','particles'],t:{zh:'一下子喷出很多小点（粒子），用来做火、烟、火星、雨。每个粒子有寿命、速度、大小、颜色。',en:'Emits lots of tiny dots (particles) for fire, smoke, sparks or rain. Each particle has a lifetime, speed, size and color.'}},
   dictionary:{zh:['Dictionary','字典'],en:['Dictionary'],t:{zh:'用「钥匙」查「值」的表，例如用物品查数量：Stick → 2。',en:'A table that looks up a value by a key, e.g. an item’s count: Stick → 2.'}},
+  transparent:{zh:['透明（Transparent）','Surface Type'],en:['Transparent','Surface Type'],t:{zh:'材质的表面类型。默认是不透明（Opaque），颜色的 A（透明度）没有用；改成透明（Transparent）后，A 越小越透明。玻璃、水、预览方块都用它。',en:'A material’s surface type. The default, Opaque, ignores the color’s A (alpha); switch to Transparent and a lower A means more see-through. Used for glass, water and preview blocks.'}},
   nullRef:{zh:['NullReferenceException'],en:['NullReferenceException'],t:{zh:'最常见的报错：代码想用一个东西，但它是空的（null）。通常是组件没加，或者检查器里的格子没拖东西进去。',en:"The most common error: the code tries to use something that is empty (null). Usually a component is missing or an Inspector slot is empty."}},
 };
 G.terms = TERMS;

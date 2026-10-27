@@ -29,7 +29,7 @@ let MODE='ch0';
 // 章节的 key：'0'、'1'、'1b'（第 1 章下篇）。模式名是 'ch' + key 或 'bugs' + key（第 0 章的找 Bug 是 'bugs'）
 const chapKey=m=>{const r=/^(?:ch|bugs)(\w+)$/.exec(m||MODE);return r?r[1]:'0';};
 const isLesson=()=>/^ch\w+$/.test(MODE),isBugs=()=>/^bugs\w*$/.test(MODE);
-const CHAPS=['0','1','1b','menu','2'];
+const CHAPS=['0','1','1b','menu','2','3'];
 
 /* ---------- 3D math (Unity convention: left-handed, Y up, Z forward) ---------- */
 function rotV(v,e){let [x,y,z]=v;const [ax,ay,az]=e.map(d=>d*Math.PI/180);
@@ -83,6 +83,8 @@ const V={yaw:-28,pitch:26,dist:13,target:[0,.5,0]};
 const keys=new Set();
 const TAGS=['Untagged','Respawn','Finish','EditorOnly','MainCamera','Player','GameController'];
 const LAYERS=['Default','TransparentFX','Ignore Raycast','Water','UI'];
+// 自己加的标签（Tags and Layers 里的 + 按钮），整个项目共用
+const allTags=()=>TAGS.concat(S&&S.tags||[]);
 const modelJson=()=>JSON.stringify([S.objs,S.prefabs,S.assets,S.env]);
 function snapJson(){return JSON.stringify([S.objs,S.prefabs,S.env]);}
 // 灯光窗口（Window → Rendering → Lighting）的设置：天空盒、环境光、雾
@@ -103,7 +105,7 @@ const freshFlags=()=>({win:[],winMsg:'',moved:false,rotated:false,scaled:false,m
   hitWall:false,fpsStopped:false,steps:0,flickered:false,doorOpened:false,navErr:false,chased:false,caught:false,escaped:false,
   animLooped:false,animStopped:false,animDone:false,lookedAt:false,torchTaken:false,keyTaken:false,lockedSeen:false,doorUsed:false,scared:false,scaredLit:false,keyed:false,recorded:false,recStopped:false});
 function init(){
-  S={objs:[],prefabs:{},assets:[],env:defEnv(),sel:null,multi:[],collapsed:[],tool:'w',tab:'scene',cwd:0,ptab:'project',step:0,playing:false,paused:false,snap:null,renaming:null,logs:[],savedJson:'',sig:'',dirty:false,flags:freshFlags()};
+  S={objs:[],prefabs:{},assets:[],env:defEnv(),sel:null,multi:[],collapsed:[],tool:'w',tab:'scene',cwd:0,ptab:'project',step:0,playing:false,paused:false,snap:null,renaming:null,logs:[],savedJson:'',sig:'',dirty:false,tags:[],flags:freshFlags()};
   mkObj('camera',t('nCamera'),[0,1,-10]);const l=mkObj('light',t('nLight'),[0,3,0]);l.rot=[50,-30,0];
   const f=mkAsset('folder','Scenes',0);const sc=mkAsset('scene','SampleScene',f.id);S.cur=sc.id;S.scenes={};S.sceneList=[];S.timeScale=1;
   S.savedJson=snapJson();S.scenes[S.cur]={saved:diskJson()};log('info','lReady');resetUndo();
@@ -198,11 +200,11 @@ function redo(){if(S.playing||!redoS.length)return;closeMenu();undoS.push(modelJ
 const saveKey=m=>'ztg.'+(m||MODE)+'.save';let saveT=0;
 function saveProgress(){clearTimeout(saveT);saveT=setTimeout(saveNow,250);}
 function saveNow(){clearTimeout(saveT);if(!S||S.playing)return;
-  try{localStorage.setItem(saveKey(),JSON.stringify({v:1,uid,lang:ZTG.lang(),s:{objs:S.objs,prefabs:S.prefabs,assets:S.assets,env:S.env,cur:S.cur,scenes:S.scenes,sceneList:S.sceneList,step:S.step,flags:S.flags,cwd:S.cwd,logs:S.logs.slice(-60),savedJson:S.savedJson,collapsed:S.collapsed}}));}catch(e){}}
+  try{localStorage.setItem(saveKey(),JSON.stringify({v:1,uid,lang:ZTG.lang(),s:{objs:S.objs,prefabs:S.prefabs,assets:S.assets,env:S.env,cur:S.cur,scenes:S.scenes,sceneList:S.sceneList,tags:S.tags,step:S.step,flags:S.flags,cwd:S.cwd,logs:S.logs.slice(-60),savedJson:S.savedJson,collapsed:S.collapsed}}));}catch(e){}}
 function loadProgress(){let d=null;try{d=JSON.parse(localStorage.getItem(saveKey())||'null');}catch(e){}
   if(!d||d.v!==1||!d.s||!Array.isArray(d.s.objs)||!Array.isArray(d.s.assets))return false;
   init();Object.assign(S,d.s);S.env=Object.assign(defEnv(),d.s.env||{});S.timeScale=1;S.playScene=null;
-  if(S.cur==null||!asset(S.cur)){const sc=S.assets.find(a=>a.type==='scene');S.cur=sc?sc.id:null;}S.scenes=S.scenes||{};S.sceneList=S.sceneList||[];
+  if(S.cur==null||!asset(S.cur)){const sc=S.assets.find(a=>a.type==='scene');S.cur=sc?sc.id:null;}S.scenes=S.scenes||{};S.sceneList=S.sceneList||[];S.tags=S.tags||[];
   if(S.cur!=null&&!S.scenes[S.cur])S.scenes[S.cur]={saved:JSON.stringify([d.s.objs,S.env])};S.flags=Object.assign(freshFlags(),d.s.flags);S.collapsed=d.s.collapsed||[];uid=Math.max(uid,d.uid||1);
   S.objs.forEach(fixObj);
   if(d.lang&&d.lang!==ZTG.lang())renameDefaults(d.lang,ZTG.lang());
@@ -343,11 +345,11 @@ function makePrefab(o,folder){
   if(!isRender(o)&&o.type!=='empty'){log('warn','lOnlyPrefab');commit();return;}
   if(kids(o).length){log('warn','lPrefabKids');commit();return;}
   const pid=nid();const a=mkAsset('prefab',o.name,folder,{prefabId:pid});
-  S.prefabs[pid]={id:pid,assetId:a.id,name:o.name,type:o.type,model:o.model||null,scale:effScale(o).slice(),mat:o.mat,rot:o.rot.slice()};
+  S.prefabs[pid]={id:pid,assetId:a.id,name:o.name,type:o.type,model:o.model||null,scale:effScale(o).slice(),mat:o.mat,rot:o.rot.slice(),tag:o.tag||'Untagged',layer:o.layer||'Default'};
   o.prefab=pid;o.scaleOverride=false;log('info','lPrefabMade',o.name,a.name);toast(t('nowPrefab',o.name));commit();}
 function spawn(a,at){const pf=S.prefabs[a.prefabId];if(!pf)return;
   const n=S.objs.filter(o=>o.prefab===pf.id).length;
-  const o=mkObj(pf.type,pf.name+' ('+n+')',at||[0,.5,0]);o.mat=pf.mat;o.prefab=pf.id;o.rot=pf.rot.slice();
+  const o=mkObj(pf.type,pf.name+' ('+n+')',at||[0,.5,0]);o.mat=pf.mat;o.prefab=pf.id;o.rot=pf.rot.slice();o.tag=pf.tag||'Untagged';o.layer=pf.layer||'Default';
   if(pf.type==='model'){o.model=pf.model;o.col={kind:'box',trigger:false,seq:0};if(at)o.pos[1]=0;}
   select('obj',o.id);log('info','lInst',o.name);commit();}
 // 把素材库模型从项目窗口拖进场景
@@ -562,7 +564,7 @@ function runCatch(o,s,a,tm){const tg=s.vals.target!=null?obj(s.vals.target):null
 function trigEnter(tr,body){for(const s of tr.scripts){const a=asset(s.asset),tm=a&&LIB()[a.name];if(!s.enabled||!tm||!a.comp||!a.comp.ok)continue;
   if(tm.kind==='door'){const rt=a.comp.rt;if(rt.method!=='OnTriggerEnter'){onceErr(a,'cb',()=>log('warn','lNoCallback',a.name,rt.method));continue;}
     trigFlash.set(a.id,performance.now()+900);
-    if(!TAGS.includes(rt.tag)){onceErr(a,'tag',()=>{const ln=logLineOf(tm,/CompareTag/);logSrc('error','lNoTag',[rt.tag],a,ln);});continue;}
+    if(!allTags().includes(rt.tag)){onceErr(a,'tag',()=>{const ln=logLineOf(tm,/CompareTag/);logSrc('error','lNoTag',[rt.tag],a,ln);});continue;}
     if(body.tag===rt.tag){const st=agentState.get('door'+tr.id)||{};st.open=true;agentState.set('door'+tr.id,st);}}
   else if(tm.kind==='jumpscare'){if(body.tag!=='Player')continue;if(agentState.get('js'+tr.id))continue;
     trigFlash.set(a.id,performance.now()+900);agentState.set('js'+tr.id,{phase:'show',t:0});}
@@ -694,9 +696,10 @@ const EDGES={plane:new T3.EdgesGeometry(GEO.plane),quad:new T3.EdgesGeometry(GEO
 const DEF_MAT=new T3.MeshStandardMaterial({color:0xcdcdcd,roughness:.55,shadowSide:T3.FrontSide});
 const MATS=new Map();
 // Standard 是旧的内置渲染管线着色器：在 URP 项目里会变成粉红色，和真 Unity 一样
-function matFor(o){const m=matOf(o);if(!m)return DEF_MAT;const sh=m.shader||'URP/Lit',key=m.id+'|'+sh;let mm=MATS.get(key);
-  if(!mm){mm=sh==='Standard'?new T3.MeshBasicMaterial({color:0xff00ff}):sh==='URP/Unlit'?new T3.MeshBasicMaterial({}):new T3.MeshStandardMaterial({roughness:.5});mm.shadowSide=T3.FrontSide;MATS.set(key,mm);}
-  if(sh!=='Standard')mm.color.set(m.color);return mm;}
+// Surface Type 选 Transparent 时，Base Map 颜色的 A（透明度）才有用
+function matFor(o){const m=matOf(o);if(!m)return DEF_MAT;const sh=m.shader||'URP/Lit',tr=m.surface==='transparent'&&sh!=='Standard',key=m.id+'|'+sh+'|'+tr;let mm=MATS.get(key);
+  if(!mm){mm=sh==='Standard'?new T3.MeshBasicMaterial({color:0xff00ff}):sh==='URP/Unlit'?new T3.MeshBasicMaterial({}):new T3.MeshStandardMaterial({roughness:.5});mm.shadowSide=T3.FrontSide;if(tr){mm.transparent=true;mm.depthWrite=false;}MATS.set(key,mm);}
+  if(sh!=='Standard')mm.color.set(m.color);if(tr)mm.opacity=clamp(m.alpha==null?1:m.alpha,0,1);return mm;}
 // Unity 坐标 → Three.js 坐标：两边各乘一个 Z 翻转矩阵（行列式不变，所以正反面不会反）
 const FLIP=new T3.Matrix4().makeScale(1,1,-1);
 function uMat(o){const R=eulerM(o.rot),s=effScale(o);const m=new T3.Matrix4().set(
@@ -1154,6 +1157,13 @@ function setEnv(k,v){const e=S.env;
   else if(k==='amb'||k==='fogColor'){if(/^#[0-9a-f]{6}$/i.test(v))e[k]=v.toLowerCase();}
   else{const n=parseFloat(String(v).replace(',','.'));if(!isNaN(n))e[k]=k==='mul'?clamp(n,0,8):Math.max(0,n);}
   commit();openLighting();}
+// 标签管理（Edit → Project Settings → Tags and Layers）：内置标签不能改，自己加的可以删
+function openTags(){const own=S.tags;
+  openFloat('tags',t('tagsT'),`<div class="subh">Tags</div><div class="slist">${own.length?own.map((x,i)=>`<div class="slrow"><span>Tag ${i}</span><b style="margin-left:12px">${esc(x)}</b><span class="sp"></span><button class="ibtn rm" data-tg="rm" data-i="${i}" aria-label="✕">✕</button></div>`).join(''):`<p class="fnote">${esc(t('tagsEmpty'))}</p>`}</div>
+  <div class="awcreate"><input class="hexin" data-tg="new" placeholder="New Tag" maxlength="30" aria-label="${t('newTagL')}"><button class="btn primary" data-tg="add">+ ${t('addTagBtn')}</button></div><p class="fnote">${esc(t('tagsNote',TAGS.join(', ')))}</p>`,
+  f=>{const add=()=>{const inp=$('[data-tg="new"]',f),v=(inp.value||'').trim();if(!v)return;if(allTags().includes(v)){toast(t('tagExists',v));return;}S.tags.push(v);log('info','lTagAdded',v);commit();openTags();};
+    f.addEventListener('click',e=>{const b=e.target.closest('[data-tg]');if(!b)return;if(b.dataset.tg==='add')add();else if(b.dataset.tg==='rm'){S.tags.splice(+b.dataset.i,1);commit();openTags();}});
+    f.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset.tg==='new')add();});});}
 function openShortcuts(){openFloat('shortcuts',t('shortcutsT'),`<table class="ptable sctable">${t('sc').map(([k,d])=>`<tr><td><kbd>${esc(k)}</kbd></td><td>${esc(d)}</td></tr>`).join('')}</table>`);}
 async function checkUpdates(manual){const show=h=>{const el=$('#updres');if(el)el.innerHTML=h;};
   if(!window.ztgApp||!ztgApp.checkUpdate){if(manual)show(esc(t('updateNA')));return;}
@@ -1165,7 +1175,7 @@ async function checkUpdates(manual){const show=h=>{const el=$('#updres');if(el)e
   }catch(e){if(manual)show(esc(t('updateErr')));}}
 $('#updbanner').addEventListener('click',()=>{if(window.ztgApp)ztgApp.openRelease();});
 $('#setbtn').addEventListener('click',openSettings);$('#helpbtn').addEventListener('click',openShortcuts);
-const FLOATS={build:openBuild,anim:openAnimWin,animator:openAnimator,lighting:openLighting,lib:openLibrary,snaps:openSnaps,prefs:openPrefs,settings:openSettings,shortcuts:openShortcuts};
+const FLOATS={tags:openTags,build:openBuild,anim:openAnimWin,animator:openAnimator,lighting:openLighting,lib:openLibrary,snaps:openSnaps,prefs:openPrefs,settings:openSettings,shortcuts:openShortcuts};
 
 /* ---------- 导出到真 Unity：把脚本和一份「怎么做」清单打成 zip ---------- */
 function crc32(b){let crc=-1;for(let i=0;i<b.length;i++){let c=(crc^b[i])&255;for(let k=0;k<8;k++)c=c&1?(c>>>1)^0xEDB88320:c>>>1;crc=(crc>>>8)^c;}return (crc^-1)>>>0;}
@@ -1180,7 +1190,10 @@ function makeZip(files){const enc=new TextEncoder(),parts=[],central=[];let off=
 const scriptText=a=>tmplOf(a).lines.map(l=>l.c.map(x=>typeof x==='string'?x:String((a.blanks||{})[x.b]||'/* TODO */')).join('')).join('\n')+'\n';
 function exportGuide(l){const zh=l==='zh',v3=v=>`(${v.map(fmt).join(', ')})`,out=[CHAP.exportIntro[l]];
   const ms=S.assets.filter(a=>a.type==='material');
-  if(ms.length){out.push(zh?'## 材质\n':'## Materials\n');ms.forEach(m=>out.push(`- ${zh?'项目窗口右键 → 创建 → 材质':'Project window right-click → Create → Material'}: **${m.name}**, Base Map \`${m.color}\`${(m.shader||'URP/Lit')!=='URP/Lit'?` (Shader: ${m.shader})`:''}`));out.push('');}
+  if(ms.length){out.push(zh?'## 材质\n':'## Materials\n');ms.forEach(m=>out.push(`- ${zh?'项目窗口右键 → 创建 → 材质':'Project window right-click → Create → Material'}: **${m.name}**, Base Map \`${m.color}\`${(m.shader||'URP/Lit')!=='URP/Lit'?` (Shader: ${m.shader})`:''}${m.surface==='transparent'?`, Surface Type: Transparent, ${zh?'Base Map 颜色的 A 改成':'set the Base Map color’s A to'} ${Math.round((m.alpha==null?1:m.alpha)*255)} (${fmt(m.alpha==null?1:m.alpha)})`:''}`));out.push('');}
+  if(S.tags.length){out.push(zh?'## 标签（Edit → Project Settings → Tags and Layers → Tags 下面点 +）\n':'## Tags (Edit → Project Settings → Tags and Layers → click + under Tags)\n');S.tags.forEach(x=>out.push('- '+x));out.push('');}
+  const pfs=Object.values(S.prefabs).filter(pf=>pf.tag&&pf.tag!=='Untagged');
+  if(pfs.length){out.push(zh?'## 预制件\n':'## Prefabs\n');pfs.forEach(pf=>out.push(`- **${pf.name}**: ${zh?'把物体从层级拖进项目窗口；预制件的 Tag':'drag the object from the Hierarchy into the Project window; prefab Tag'} ${pf.tag}`));out.push('');}
   const e=S.env,de=defEnv();
   if(JSON.stringify(e)!==JSON.stringify(de)){out.push(zh?'## 灯光窗口（Window → Rendering → Lighting → Environment）\n':'## Lighting window (Window → Rendering → Lighting → Environment)\n');
     if(!e.skybox)out.push('- Skybox Material: None');
@@ -1312,7 +1325,7 @@ Object.assign(ZTG,{WORDER,WSEL,mkObj,mkAsset,select,P,FL,near,effScale,matOf,mat
   stopPlay,addScript,addRigidbody,setParent:reparent,compileScript,closeCode,bakeNav,inCameraView,setSetting,buildExport,enterMode,
   lib:()=>LIB(),openScene,openBuild,createUI,sceneObjs,curScene:()=>sceneName(S.cur),
   createSceneAsset:(name,folder)=>{const a=mkAsset('scene',name,folder);S.scenes[a.id]={saved:newSceneJson()};return a;},
-  setSceneObjs:(id,objs)=>{if(id===S.cur){S.objs=objs;return;}const d=JSON.parse(S.scenes[id].saved);d[0]=objs;S.scenes[id].saved=JSON.stringify(d);},mkLight,wPos,wAABB,colBounds,uniqueName,importSound,openLighting,closeFloat,floatOpen:()=>floatId,isMesh,TAGS,
+  setSceneObjs:(id,objs)=>{if(id===S.cur){S.objs=objs;return;}const d=JSON.parse(S.scenes[id].saved);d[0]=objs;S.scenes[id].saved=JSON.stringify(d);},mkLight,wPos,wAABB,colBounds,uniqueName,importSound,openLighting,openTags,allTags,closeFloat,floatOpen:()=>floatId,isMesh,TAGS,
   setView:(target,dist,yaw,pitch)=>{V.target=target.slice();if(dist)V.dist=dist;if(yaw!=null)V.yaw=yaw;if(pitch!=null)V.pitch=pitch;},
   codeOpen:()=>codeId,codeDraft:b=>{const el=$(`#modal .blank[data-b="${b}"]`);return el?el.value:'';},codeDirty:()=>codeIsDirty(),hint:HINT});
 
@@ -1508,6 +1521,8 @@ const ck=(tk,bind,on,dis)=>`<label class="ck"><input type="checkbox" ${bind?`dat
 const head=tk=>`<h4><span${tip(tk)}>${t(tk)}</span></h4>`;
 const rmBtn=c=>`<span class="sp"></span><button class="ibtn rm" data-act="rmcomp" data-c="${c}" title="${esc(t('removeComp'))}" aria-label="${esc(t('removeComp'))}">✕</button>`;
 const headRm=(tk,c)=>`<h4><span${tip(tk)}>${t(tk)}</span>${rmBtn(c)}</h4>`;
+// 标签下拉：内置的 + 自己加的，最后一项「Add Tag…」打开标签管理
+const tagOpts=cur=>allTags().map(x=>`<option${x===cur?' selected':''}>${esc(x)}</option>`).join('')+(allTags().includes(cur)?'':`<option selected>${esc(cur)}</option>`)+`<option value="__add">${esc(t('addTagOpt'))}</option>`;
 const REF_NAME={uislider:'Slider',uitext:'TMP_Text',uiimage:'Image',uibutton:'Button',light:'Light'};
 const numRow=(tk,b,v,extra)=>`<div class="vrow"><label${tip(tk)}>${t(tk)}</label><div class="vin" style="max-width:110px"><input inputmode="decimal" data-bind="${b}" value="${fmt(v)}" aria-label="${esc(t(tk))}"${extra||''}></div></div>`;
 const colRow=(tk,b,v,pal)=>`<div class="vrow"><label>${t(tk)}</label><div class="slot"><span class="sw" style="background:${esc(v)}"></span><input class="hexin" data-bind="${b}" value="${esc(v)}" maxlength="7" aria-label="${esc(t(tk))}"></div></div>${pal?`<div class="pal">${pal.map(c=>`<button data-act="setc" data-b="${b}" data-c="${c}" style="background:${c}" aria-label="${t('colorAria',c)}"></button>`).join('')}</div>`:''}`;
@@ -1587,7 +1602,7 @@ function renderInsp(){
       ...(o.navs?[{seq:o.navs.seq||0,html:`<div class="comp">${headRm('navSurface','navs')}<div class="kv">${o.navs.baked?t('navBaked',o.navs.baked.w.split('1').length-1):t('navNone')}</div><div class="gact" style="margin-top:6px"><button class="btn" data-act="bake">${t('bake')}</button><button class="btn quiet" data-act="clearnav">${t('clearNav')}</button></div></div>`}]:[])
     ].sort((x,y)=>x.seq-y.seq);
     b.innerHTML=`<div class="comp"><div class="namerow"><input type="checkbox" data-bind="active" ${o.active===false?'':'checked'} aria-label="${t('activeL')}" title="${esc(t('activeL'))}"><input class="nameinput" data-bind="name" value="${esc(o.name)}" aria-label="${t('objName')}"></div>
-    <div class="tagrow"><label><span${tip('tag')}>${t('tag')}</span><select data-bind="tag">${TAGS.map(x=>`<option${x===o.tag?' selected':''}>${x}</option>`).join('')}</select></label>
+    <div class="tagrow"><label><span${tip('tag')}>${t('tag')}</span><select data-bind="tag">${tagOpts(o.tag)}</select></label>
     <label><span${tip('layer')}>${t('layer')}</span><select data-bind="layer">${LAYERS.map(x=>`<option${x===o.layer?' selected':''}>${x}</option>`).join('')}</select></label></div>
     ${o.prefab?`<div style="margin-top:6px;color:var(--accent);font-size:12px">${IC.cube(12)} <span${tip('prefabInst')}>${t('prefabInst')}</span><span class="tag">${esc((S.prefabs[o.prefab]||{}).name||'')}</span></div>`:''}</div>
     ${uiInsp(o)||`<div class="comp">${head('transform')}${vec('position','pos',o.pos.map(fmt))}${vec('rotation','rot',o.rot.map(fmt))}${vec('scale','scl',sc.map(fmt),o.prefab&&!o.scaleOverride?`<span class="tag">${t('fromPrefab')}</span>`:'')}</div>`}
@@ -1600,7 +1615,7 @@ function renderInsp(){
     <div class="comp addc"><button class="btn" id="addcomp" data-act="addcomp" data-plus="1"${tip('addComponent')}>${t('addComponent')}</button></div>`;
   }else if(a){
     let inner=`<div class="comp"><input class="nameinput" data-bind="aname" value="${esc(a.name)}" aria-label="${t('fileName')}"></div>`;
-    if(a.type==='material')inner+=`<div class="comp">${head('material')}<div class="kv"><span${tip('shader')}>${t('shader')}</span><select class="schemesel" data-bind="shader" aria-label="${t('shader')}">${['URP/Lit','URP/Unlit','Standard'].map(x=>`<option value="${x}"${x===(a.shader||'URP/Lit')?' selected':''}>${x==='Standard'?esc(t('shaderStd')):x}</option>`).join('')}</select></div><div class="vrow"><label${tip('baseMap')}>${t('baseMap')}</label><div class="slot"><span class="sw" style="background:${esc(a.color)}"></span><span style="font-family:var(--mono)">${esc(a.color)}</span></div></div><div class="pal">${PAL.map(c=>`<button data-act="color" data-c="${c}" style="background:${c}" aria-label="${t('colorAria',c)}"></button>`).join('')}</div><input class="hexin" data-bind="hex" value="${esc(a.color)}" aria-label="${t('hexAria')}" maxlength="7"></div>
+    if(a.type==='material')inner+=`<div class="comp">${head('material')}<div class="kv"><span${tip('shader')}>${t('shader')}</span><select class="schemesel" data-bind="shader" aria-label="${t('shader')}">${['URP/Lit','URP/Unlit','Standard'].map(x=>`<option value="${x}"${x===(a.shader||'URP/Lit')?' selected':''}>${x==='Standard'?esc(t('shaderStd')):x}</option>`).join('')}</select></div><div class="kv"><span>${t('surfaceType')}</span><select class="schemesel" data-bind="surface" aria-label="${t('surfaceType')}">${['opaque','transparent'].map(x=>`<option value="${x}"${x===(a.surface||'opaque')?' selected':''}>${t('sf_'+x)}</option>`).join('')}</select></div><div class="vrow"><label${tip('baseMap')}>${t('baseMap')}</label><div class="slot"><span class="sw" style="background:${esc(a.color)}${a.surface==='transparent'?`;opacity:${a.alpha==null?1:a.alpha}`:''}"></span><span style="font-family:var(--mono)">${esc(a.color)}</span></div></div>${a.surface==='transparent'?numRow('alphaL','malpha',a.alpha==null?1:a.alpha):''}<div class="pal">${PAL.map(c=>`<button data-act="color" data-c="${c}" style="background:${c}" aria-label="${t('colorAria',c)}"></button>`).join('')}</div><input class="hexin" data-bind="hex" value="${esc(a.color)}" aria-label="${t('hexAria')}" maxlength="7"></div>
       <div class="comp"><h4>${t('palette')}<span class="sp"></span><select class="schemesel" data-bind="scheme" aria-label="${t('palette')}">${['analog','complement','triad','mono'].map(k=>`<option value="${k}"${k===palScheme?' selected':''}>${t(k)}</option>`).join('')}</select></h4><div class="pal palgen">${paletteOf(palBase.get(a.id)||a.color,palScheme).map(c=>`<button data-act="color" data-c="${c}" style="background:${c}" aria-label="${t('colorAria',c)}" title="${c}"></button>`).join('')}</div><button class="btn" data-act="palmats">${t('palMats')}</button></div>`;
     else if(a.type==='script'){const st=!a.comp?`<div class="kv">${t('notCompiled')}</div>`:a.comp.ok?`<div class="kv okc">${t('scriptOk')}</div>`:`<div class="kv bad">${t('scriptErrs',a.comp.errs.length)}</div>`;
       inner+=`<div class="comp">${head('monoscript')}${st}<button class="btn" data-act="openscript" data-id="${a.id}">${t('openCode')}</button>${!LIB()[a.name]?`<div class="warnbox">${esc(t('nameMismatch',a.name))}</div>`:''}</div>`;}
@@ -1608,7 +1623,7 @@ function renderInsp(){
     else if(a.type==='animctrl')inner+=`<div class="comp">${head('animCtrl')}${kv('statesL',a.states.map(x=>esc(x.name)).join('、'))}${kv('paramsL',a.params.map(x=>esc(x.name)).join('、')||'—')}<button class="btn" data-act="openanimator">${t('animatorWinM')}</button></div>`;
     else if(a.type==='audio'){const c=(ZTG.audio&&ZTG.audio.clips[a.clip])||{len:0};inner+=`<div class="comp">${head('audioClip')}${kv('lengthL',fmt(c.len)+' s')}<p class="fnote">${esc(L(c))}</p><button class="btn" data-act="preview" data-k="${esc(a.clip)}">▶ ${t('previewBtn')}</button></div>`;}
     else if(a.type==='itemdata')inner+=`<div class="comp">${head('itemDataT')}<div class="vrow"><label>${t('itemName')}</label><input class="hexin" data-bind="iname" value="${esc(a.itemName||'')}" aria-label="${t('itemName')}"></div><div class="vrow"><label>${t('iconColor')}</label><div class="slot"><span class="sw" style="background:${esc(a.color)}"></span><input class="hexin" data-bind="icolor" value="${esc(a.color)}" maxlength="7" aria-label="${t('iconColor')}"></div></div>${ck('stackable','istack',a.stackable)}<div class="vrow"><label>${t('maxStack')}</label><div class="vin" style="max-width:110px"><input inputmode="decimal" data-bind="imax" value="${a.maxStack}" aria-label="${t('maxStack')}"></div></div></div>`;
-    else if(a.type==='prefab'){const pf=S.prefabs[a.prefabId];inner+=`<div class="comp">${head('prefabAsset')}${kv('instances',S.objs.filter(x=>x.prefab===a.prefabId).length)}${pf?vec('pscl','pscl',pf.scale.map(fmt)):''}</div>`;}
+    else if(a.type==='prefab'){const pf=S.prefabs[a.prefabId];inner+=`<div class="comp">${head('prefabAsset')}${pf?`<div class="tagrow"><label><span${tip('tag')}>${t('tag')}</span><select data-bind="ptag">${tagOpts(pf.tag||'Untagged')}</select></label></div>`:''}${kv('instances',S.objs.filter(x=>x.prefab===a.prefabId).length)}${pf?vec('pscl','pscl',pf.scale.map(fmt)):''}</div>`;}
     else inner+=`<div class="comp">${kv('type',t(a.type==='folder'?'folder':'sceneT'))}</div>`;
     b.innerHTML=inner;
   }else b.innerHTML=`<p class="empty">${t('nothingSel')}</p>`;
@@ -1629,6 +1644,11 @@ $('#insp-body').addEventListener('change',e=>{const el=e.target,b=el.dataset.bin
   else if(k==='hex'&&a){if(/^#[0-9a-f]{6}$/i.test(el.value)){a.color=el.value.toLowerCase();palBase.set(a.id,a.color);}}
   else if(k==='scheme'){palScheme=el.value;}
   else if(k==='shader'&&a){a.shader=el.value;}
+  else if(k==='surface'&&a){a.surface=el.value;if(a.alpha==null)a.alpha=1;}
+  else if(k==='malpha'&&a){if(!isNaN(num))a.alpha=clamp(num,0,1);}
+  else if((k==='tag'||k==='ptag')&&el.value==='__add'){renderInsp();openTags();return;}
+  // 改预制件的标签：没单独改过标签的副本跟着变
+  else if(k==='ptag'&&a&&S.prefabs[a.prefabId]){const pf=S.prefabs[a.prefabId],old=pf.tag||'Untagged';pf.tag=el.value;S.objs.forEach(x=>{if(x.prefab===pf.id&&x.tag===old)x.tag=el.value;});}
   else if(o&&k==='tag')o.tag=el.value;else if(o&&k==='layer')o.layer=el.value;
   else if(o&&k==='en'){o.scripts[+i].enabled=el.checked;}
   else if(o&&o.col&&k==='trig'){o.col.trigger=el.checked;}
@@ -1817,7 +1837,7 @@ const MENUS={
   file:()=>[{tk:'save',k:'save',fn:saveScene},{tk:'saveAs',dis:true},{tk:'buildM',k:'buildprofiles',fn:openBuild},{tk:'exportM',k:'export',fn:exportUnity}],
   edit:()=>[{tk:'undo',k:'undo',fn:undo,dis:!undoS.length||S.playing},{tk:'redo',k:'redo',fn:redo,dis:!redoS.length||S.playing},
     {tk:'dup',k:'dup',fn:duplicateSel,dis:!selIds().length},{tk:'copy',k:'copy',fn:copySel,dis:!selIds().length},{tk:'paste',k:'paste',fn:pasteClip,dis:!clip},{tk:'del',k:'del',fn:deleteSel},
-    {tk:'clearPrefs',k:'clearprefs',fn:()=>{prefsSet({});log('info','lPrefsCleared');toast(t('lPrefsCleared'));commit();if(floatId==='prefs')openPrefs();}}],
+    {tk:'tagsM',k:'tagsm',fn:openTags},{tk:'clearPrefs',k:'clearprefs',fn:()=>{prefsSet({});log('info','lPrefsCleared');toast(t('lPrefsCleared'));commit();if(floatId==='prefs')openPrefs();}}],
   go:()=>items3D(),
   window:()=>[{tk:'animationM',k:'animation',children:[{tk:'animWinM',k:'animwin',fn:openAnimWin},{tk:'animatorWinM',k:'animatorwin',fn:openAnimator}]},{tk:'renderingM',k:'rendering',children:[{tk:'lightingM',k:'lighting',fn:openLighting}]},{tk:'libraryM',k:'library',fn:openLibrary},{tk:'snapsM',k:'snaps',fn:openSnaps},{tk:'prefsM',k:'prefs',fn:openPrefs},{tk:'settingsM',k:'settings',fn:openSettings},{tk:'shortcutsM',k:'shortcuts',fn:openShortcuts},{tk:'layouts',k:'layouts',children:[{tk:'default',k:'default',fn:()=>{S.tab='scene';commit();toast(t('layoutReset'));}}]}]};
 $$('.mbtn').forEach(b=>b.addEventListener('click',()=>{const was=b.classList.contains('open');closeMenu();if(was)return;const r=b.getBoundingClientRect();b.classList.add('open');openMenu(MENUS[b.dataset.menu](),r.left,r.bottom+2);b.classList.add('open');}));
@@ -1886,6 +1906,7 @@ function applyStatic(){
   $('#ch1btitle').textContent=L(ZTG.chapters.ch1b.title);$('#ch1blabel').textContent=L(ZTG.chapters.ch1b.label);$('#chbugs1blabel').textContent=L(ZTG.chapters.ch1b.label);
   $('#ch1bdesc').textContent=t('ch1bdesc',ZTG.chapters.ch1b.steps.length);
   $('#ch2title').textContent=L(ZTG.chapters.ch2.title);$('#ch2desc').textContent=t('ch2desc',ZTG.chapters.ch2.steps.length);
+  $('#ch3title').textContent=L(ZTG.chapters.ch3.title);$('#ch3desc').textContent=t('ch3desc',ZTG.chapters.ch3.steps.length);
   const cm=ZTG.chapters.chmenu;$('#chmenutitle').textContent=L(cm.title);$('#chmenulabel').textContent=L(cm.label);$('#chbugsmenulabel').textContent=L(cm.label);$('#chmenudesc').textContent=t('chmenuDesc',cm.steps.length);
   $('#chaptag').textContent=chapTag();
   $$('.langbtn').forEach(b=>{b.textContent=ZTG.lang()==='zh'?'English':'中文';});
