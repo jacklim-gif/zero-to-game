@@ -257,7 +257,8 @@ zh: {
   lArgNull:'ArgumentNullException: Value cannot be null. Parameter name: key 格子里没有放物品数据（Item Data）。',
   whyNoInv:'场景里找不到 Inventory（背包）脚本。它要挂在 Player 上。', whyNoStats:'找不到 SurvivalStats 脚本。它要挂在 Player 上。',
   // 第 3 章：沙盒游戏（透明材质、标签）
-  ch3desc:n=>`像 Minecraft 一样盖房子（制作中）：现在有开场地图和前 ${n} 步：四种方块、透明的玻璃、标签和预制件。瞄准、放置、拆除会陆续加上。`,
+  ch3desc:n=>`像 Minecraft 一样盖房子（制作中）：现在有开场地图和前 ${n} 步：四种方块、透明的玻璃、标签和预制件、预览方块、射线瞄准和对齐网格。放置、拆除会陆续加上。`,
+  codeUp:'＋ 加入这一步的新代码', lCodeUp:n=>`${n}.cs 加入了这一步的新代码（左边有绿线的行）。填好空，再保存。`,
   bugsCard3:'方块坏掉了，把问题找出来修好。',
   surfaceType:'表面类型（Surface Type）', sf_opaque:'不透明（Opaque）', sf_transparent:'透明（Transparent）',
   addTagOpt:'Add Tag…（添加标签）', tagsT:'标签和层（Tags and Layers）', tagsM:'项目设置：标签和层…', tagsEmpty:'还没有自己加的标签。',
@@ -510,7 +511,8 @@ en: {
   lArgNull:'ArgumentNullException: Value cannot be null. Parameter name: key',
   whyNoInv:'', whyNoStats:'',
   // Chapter 3: sandbox (transparent materials, tags)
-  ch3desc:n=>`Build like Minecraft (in progress): the starting map and the first ${n} steps — four kinds of blocks, see-through glass, tags and prefabs. Aiming, placing and removing are coming next.`,
+  ch3desc:n=>`Build like Minecraft (in progress): the starting map and the first ${n} steps — four kinds of blocks, see-through glass, tags and prefabs, a preview block, aiming with a raycast and snapping to the grid. Placing and removing are coming next.`,
+  codeUp:'+ Add this step’s code', lCodeUp:n=>`Added this step’s code to ${n}.cs (the lines with a green bar). Fill the blanks, then save.`,
   bugsCard3:'The blocks are broken. Find and fix the problems.',
   surfaceType:'Surface Type', sf_opaque:'Opaque', sf_transparent:'Transparent',
   addTagOpt:'Add Tag…', tagsT:'Tags and Layers', tagsM:'Project Settings: Tags and Layers…', tagsEmpty:'No tags of your own yet.',

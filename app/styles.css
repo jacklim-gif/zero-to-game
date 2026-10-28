@@ -171,6 +171,7 @@ button.chap .st.done{background:var(--ok);color:#fff}
 .blank.err{border-bottom:2px wavy var(--err);background:rgba(239,108,108,.16)}
 .cl.bad .n{color:var(--err)!important;font-weight:600}
 .cl.run{background:rgba(90,149,234,.10)}
+.cl.new{box-shadow:inset 3px 0 0 var(--ok)}.cl.new .n{color:var(--ok)}
 .cl.hot{background:rgba(240,178,74,.38)}
 .cl{transition:background .12s}
 .errt{color:var(--err);font-family:var(--mono);font-size:12px}

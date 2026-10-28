@@ -993,7 +993,64 @@ const SaveGame = {
     { c: ['}'] }],
 };
 
+
+// ---------- 第 3 章：沙盒游戏 ----------
+// BuildSystem 是分版本的脚本：每一步在代码窗口点「加入这一步的新代码」，多出几行（v 从第几版开始有，upto 到第几版被换掉）
+const BuildSystem = {
+  name: 'BuildSystem', kind: 'build', maxVer: 1,
+  fields: [{ id: 'preview', label: 'Preview', type: 'transform', go: true, def: null }, { id: 'reach', label: 'Reach', type: 'float', def: 6 }],
+  blanks: [
+    { id: 'ray', w: 7, tip: { zh: '从一个点往一个方向射线：Raycast', en: 'Shoot a ray from a point in a direction: Raycast' } },
+    { id: 'floor', w: 5, tip: { zh: '往下取整：Floor', en: 'Round down: Floor' } },
+    { id: 'normal', w: 6, v: 1, tip: { zh: '打中的那一面朝外的方向：normal', en: 'The direction the hit face points: normal' } }],
+  answers: { ray: 'Raycast', floor: 'Floor', normal: 'normal' },
+  compile(b, ver) {
+    const E = [], rt = {};
+    const r = val(b, 'ray');
+    if (!r) E.push({ b: 'ray', code: 'CS1001', en: 'Identifier expected', zh: '点号后面空着，要填 Raycast。' });
+    else if (r !== 'Raycast') E.push({ b: 'ray', code: 'CS0117', en: `'Physics' does not contain a definition for '${r}'`, zh: `Physics 没有「${r}」。要写 Raycast（R 大写）。` });
+    const f = val(b, 'floor');
+    if (!f) E.push({ b: 'floor', code: 'CS1001', en: 'Identifier expected', zh: '点号后面空着，要填 Floor。' });
+    else if (['Floor', 'Round', 'Ceil'].includes(f)) rt.floor = f;
+    else E.push({ b: 'floor', code: 'CS0117', en: `'Mathf' does not contain a definition for '${f}'`, zh: `Mathf 没有「${f}」。往下取整要写 Floor（F 大写）。` });
+    if (ver >= 1) {
+      const n = val(b, 'normal');
+      if (!n) E.push({ b: 'normal', code: 'CS1001', en: 'Identifier expected', zh: '点号后面空着，要填 normal。' });
+      else if (n === 'normal' || n === 'point') rt.normal = n;
+      else E.push({ b: 'normal', code: 'CS1061', en: `'RaycastHit' does not contain a definition for '${n}' and no accessible extension method '${n}' accepting a first argument of type 'RaycastHit' could be found (are you missing a using directive or an assembly reference?)`, zh: `RaycastHit 没有「${n}」。那一面朝外的方向叫 normal（全小写）。` });
+    }
+    return { errors: E, rt };
+  },
+  lines: [
+    { c: ['using UnityEngine;'] },
+    { c: [''] },
+    { c: ['public class BuildSystem : MonoBehaviour'], x: { zh: '盖房子的脚本，挂在主摄像机上：从屏幕中间（准星）往前射一条线，打中哪里，预览方块就对齐网格放到哪里。', en: 'The building script, on the Main Camera: it shoots a ray straight out of the screen center (the crosshair), and the preview block snaps to the grid wherever it hits.' } },
+    { c: ['{'] },
+    { c: ['    public GameObject preview;'], err: 'noPreview', x: { zh: '半透明的预览方块。把层级里的 Preview 拖进检查器的这一格。', en: 'The see-through preview block. Drag Preview from the Hierarchy into this slot in the Inspector.' } },
+    { c: ['    public float reach = 6f;'], x: { zh: '手能伸多远：射线最远 6 米。太远的地方放不了。', en: 'How far you can reach: the ray goes at most 6 meters. You can’t build farther away.' } },
+    { c: ['    RaycastHit hit;'], x: { zh: '用来存射线打中的东西：打中了谁、打中的点、那一面朝哪。', en: 'Holds what the ray hit: which object, the hit point, and which way that face points.' } },
+    { c: ['    Vector3 target;'], x: { zh: '方块要放进去的那一格的中心。', en: 'The center of the grid cell the block will go into.' } },
+    { c: [''] },
+    { c: ['    void Update()'], run: 'update' },
+    { c: ['    {'], run: 'update' },
+    { c: ['        bool hasTarget = Physics.', B('ray'), '(transform.position, transform.forward, out hit, reach);'], run: 'update', x: { zh: 'Physics.Raycast：从摄像机的位置，朝摄像机前方（transform.forward）射线，最远 reach 米。打中东西就回答 true，打中的资料放进 hit。只打得到有碰撞体的东西。', en: 'Physics.Raycast: shoots from the camera’s position along its forward direction (transform.forward), up to reach meters. It answers true if it hits something and puts the details in hit. It only hits objects with colliders.' } },
+    { c: ['        preview.SetActive(hasTarget);'], run: 'update', err: 'noPreview', x: { zh: '打中了才显示预览；看着天空时把它藏起来。', en: 'Show the preview only when something is hit; hide it when you look at the sky.' } },
+    { c: ['        if (!hasTarget) return;'], run: 'update', x: { zh: '没打中就到此为止，下面的不用做。', en: 'If nothing was hit, stop here.' } },
+    { c: [''], run: 'update' },
+    { c: ['        Vector3 p = hit.point;'], upto: 1, run: 'update', x: { zh: 'hit.point：射线打中的那一点。对着地面没问题；对着侧面时，这一点刚好在面上，对齐以后可能落进被打中的方块里面。', en: 'hit.point: where the ray hit. Fine on the ground; on a side face the point sits right on the surface, so after snapping it can land inside the block you hit.' } },
+    { c: ['        Vector3 p = hit.point + hit.', B('normal'), ' * 0.5f;'], v: 1, run: 'update', x: { zh: 'hit.normal 是打中的那一面「朝外」的方向（例如顶面朝上、左边那面朝左）。从打中的点往外走半格，就一定落在旁边那一格里，不会钻进方块。', en: 'hit.normal is the direction the hit face points outward (the top points up, the left side points left). Stepping half a cell outward from the hit point always lands in the neighboring cell, never inside the block.' } },
+    { c: ['        target = new Vector3(Snap(p.x), Snap(p.y), Snap(p.z));'], run: 'update', x: { zh: 'X、Y、Z 三个方向都对齐到格子中心。', en: 'Snap X, Y and Z to the center of a grid cell.' } },
+    { c: ['        preview.transform.position = target;'], run: 'move', x: { zh: '把预览方块搬到那一格。', en: 'Move the preview block to that cell.' } },
+    { c: ['    }'], run: 'update' },
+    { c: [''] },
+    { c: ['    float Snap(float v)'], run: 'update', x: { zh: '对齐网格：把任何数变成它所在那一格的中心。', en: 'Snap to the grid: turn any number into the center of the cell it falls in.' } },
+    { c: ['    {'], run: 'update' },
+    { c: ['        return Mathf.', B('floor'), '(v) + 0.5f;'], run: 'update', x: { zh: 'Mathf.Floor 是往下取整：2.7 → 2，-0.3 → -1。再加 0.5 就是这一格的中心（方块边长 1，中心在 .5 上）。写成 Round（四舍五入）也能编译，但方块会差半格。', en: 'Mathf.Floor rounds down: 2.7 → 2, -0.3 → -1. Adding 0.5 gives the cell’s center (blocks are 1 wide, centered on .5). Round also compiles, but blocks end up half a cell off.' } },
+    { c: ['    }'], run: 'update' },
+    { c: ['}'] }],
+};
+
 ZTG.scriptLib = { FirstPersonMove, EnemyChase, SurvivalStats, DayNightCycle, SaveLoad, ItemData, Inventory, LightFlicker, Footsteps, DoorOpen, CatchPlayer, ExitZone,
   Interactable, Interact, FlashlightPickup, KeyPickup, LockedDoor, Jumpscare, MainMenu, PauseMenu,
-  DrinkWater, BerryBush, ItemPickup, Crafting, ChopTree, Campfire, SaveGame };
+  DrinkWater, BerryBush, ItemPickup, Crafting, ChopTree, Campfire, SaveGame, BuildSystem };
 })();

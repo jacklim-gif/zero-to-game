@@ -377,7 +377,14 @@ function removeComp(o,c){if(!o)return;if(c.startsWith('script:'))o.scripts.splic
 // 不同脚本模板：第 0 章的 PlayerMove + scripts.js 里的内置脚本。文件名决定用哪个模板。
 const PM=()=>ZTG.chapters.ch0.script;
 const LIB=()=>Object.assign({PlayerMove:PM()},ZTG.scriptLib||{});
-const tmplOf=a=>LIB()[a.name]||PM();
+// 分版本的脚本（第 3 章的 BuildSystem）：每一步在代码窗口点「加入新代码」多出几行。a.ver 是现在到第几版；
+// 行、空格、检查器字段可以写 v（从第几版开始有）和 upto（到第几版被换掉）
+const VIEWS=new Map();
+function verOf(a){const tm=LIB()[a.name];if(!tm||!tm.maxVer)return 0;
+  if(a.ver==null){const v=isLesson()&&CHAP.scriptVer?CHAP.scriptVer[a.name]:null;a.ver=v==null?tm.maxVer:v;}return a.ver;}
+const inVer=(x,v)=>(x.v||0)<=v&&(x.upto==null||v<x.upto);
+function tmplOf(a){const tm=LIB()[a.name];if(!tm)return PM();if(!tm.maxVer)return tm;const v=verOf(a),k=a.name+'|'+v;let vw=VIEWS.get(k);
+  if(!vw){vw=Object.assign({},tm,{ver:v,lines:tm.lines.filter(l=>inVer(l,v)),blanks:tm.blanks.filter(b=>inVer(b,v)),fields:(tm.fields||[]).filter(f=>inVer(f,v)),compile:b=>tm.compile(b,v)});VIEWS.set(k,vw);}return vw;}
 const nice=n=>n.replace(/([a-z])([A-Z])/g,'$1 $2');
 function addScript(o,a){const tm=tmplOf(a),vals={};
   (tm.fields||[]).forEach(f=>{vals[f.id]=f.id==='speed'&&a.comp&&a.comp.rt&&a.comp.rt.speed!=null?a.comp.rt.speed:f.def;});
@@ -405,7 +412,7 @@ function assetPath(a){const p=[];let c=a.parent;while(c){const f=asset(c);if(!f)
 function blankPos(b,vals,tm){const lines=(tm||PM()).lines;for(let i=0;i<lines.length;i++){let col=1;
   for(const seg of lines[i].c){if(typeof seg==='string')col+=seg.length;else if(seg.b===b)return {line:i,col};else col+=String(vals[seg.b]||'').length;}}return {line:-1,col:1};}
 function compileOne(a){const tm=tmplOf(a),vals=a.blanks||{};const r=tm.compile(vals);
-  const errs=r.errors.map(e=>e.line!=null?Object.assign({col:1},e):Object.assign({},e,blankPos(e.b,vals,tm)));a.comp={ok:!errs.length,errs,rt:r.rt};}
+  const errs=r.errors.map(e=>e.line!=null?Object.assign({col:1},e):Object.assign({},e,blankPos(e.b,vals,tm)));a.comp={ok:!errs.length,errs,rt:Object.assign({},r.rt,{ver:tm.ver||0})};}
 // 和 Unity 一样，存一个脚本会让用到它的其他脚本也重新编译（例如 FlashlightPickup 用到 Interactable）
 function compileScript(a){compileOne(a);S.assets.forEach(x=>{if(x!==a&&x.type==='script'&&x.comp&&(tmplOf(x).deps||[]).includes(a.name))compileOne(x);});}
 function compileErrs(){const out=[];for(const a of S.assets){if(a.type!=='script'||!a.comp||a.comp.ok)continue;
@@ -667,6 +674,17 @@ function callMethod(o,s,fn){const a=asset(s.asset),tm=a&&LIB()[a.name];if(!tm||!
   else if(tm.kind==='pause'){const st=agentState.get('pz'+o.id)||{};agentState.set('pz'+o.id,st);const pn=s.vals.pausePanel!=null?obj(s.vals.pausePanel):null;
     if(fn==='Resume'){if(!pn){unassigned(a,tm,'pausePanel','noPanel');return;}pn.active=false;S.timeScale=1;st.paused=false;if(S.flags.paused)S.flags.resumed=true;if(fpsActive())lockMouse();}
     else if(fn==='BackToMenu'){S.timeScale=1;if(loadSceneByName('MainMenu',a,tm,/"MainMenu"/))S.flags.backToMenu=true;}}}
+// 第 3 章：BuildSystem —— 从摄像机往前射线，打中的点（第 1 版起再往外走半格）对齐到网格，预览方块放过去
+function runBuild(o,s,a){const tm=tmplOf(a),rt=a.comp.rt,v=s.vals;let root=o;while(par(root))root=par(root);
+  const pv=v.preview!=null?obj(v.preview):null;if(!pv){unassigned(a,tm,'preview','noPreview');return false;}
+  const h=raycastW(wPos(o),mMV(wRot(o),[0,0,1]),new Set(subtree(root).map(q=>q.id))),hit=!!h&&h.d<=(v.reach==null?6:v.reach);
+  pv.active=hit;if(!hit)return false;
+  const p=rt.ver>=1?add(h.p,mul(rt.normal==='point'?h.p:h.n,.5)):h.p;
+  const sn=x=>(rt.floor==='Round'?Math.round(x):rt.floor==='Ceil'?Math.ceil(x-1e-6):Math.floor(x+1e-6))+.5,tg=p.map(sn).map(rnd);setWorldPos(pv,tg);
+  const st=agentState.get('bs'+o.id)||{cells:new Set()};agentState.set('bs'+o.id,st);st.cells.add(tg.join(','));if(st.cells.size>=4)S.flags.aimed=true;
+  // 对着侧面：预览有没有钻进被打中的东西里
+  if(Math.abs(h.n[1])<.5&&h.o.col){const b=wAABB(h.o,colBounds(h.o));const inside=!!b&&[0,1,2].every(k=>tg[k]>b[0][k]+.01&&tg[k]<b[1][k]-.01);if(inside)S.flags.sideInside=true;else if(rt.ver>=1&&rt.normal==='normal')S.flags.sideAim=true;}
+  return true;}
 function runScripts(dt,onlyUnscaled){let moving=false;const ran=new Set();walkedPrev=walkedNow;walkedNow=new Set();playT+=dt;
   for(const o of S.objs){if(!isActive(o))continue;for(const s of o.scripts){const a=asset(s.asset);const tm=a&&LIB()[a.name];if(!s.enabled||!tm||!a.comp||!a.comp.ok)continue;if(onlyUnscaled&&tm.kind!=='pause')continue;ran.add(a.id);
     if(!s.vals)s.vals={speed:5};
@@ -674,7 +692,7 @@ function runScripts(dt,onlyUnscaled){let moving=false;const ran=new Set();walked
     else if(tm.kind==='survival')mv=runSurvival(o,s,a,tm,dt);else if(tm.kind==='daynight')mv=runDayNight(o,s,a,dt);else if(tm.kind==='saveload')mv=runSaveLoad(o,s,a,tm);
     else if(tm.kind==='flicker')mv=runFlicker(o,s,a,tm,dt);else if(tm.kind==='footsteps')mv=runFootsteps(o,s,a,tm,dt);else if(tm.kind==='door')mv=runDoor(o,s,a,tm,dt);else if(tm.kind==='catch')mv=runCatch(o,s,a,tm);
     else if(tm.kind==='interact')mv=runInteract(o,s,a,tm);else if(tm.kind==='jumpscare')mv=runJumpscare(o,s,a,tm,dt);else if(tm.kind==='pause')mv=runPause(o,s,a,tm);
-    else if(tm.kind==='inventory')mv=runInventory(o,s,a,tm);else if(tm.kind==='chop')mv=runChop(o,s,a,tm,dt);else if(tm.kind==='savegame')mv=runSaveGame(o,s,a,tm);
+    else if(tm.kind==='inventory')mv=runInventory(o,s,a,tm);else if(tm.kind==='chop')mv=runChop(o,s,a,tm,dt);else if(tm.kind==='savegame')mv=runSaveGame(o,s,a,tm);else if(tm.kind==='build')mv=runBuild(o,s,a);
     if(mv)moving=a.id;}}
   mdx=mdy=0;pressedNow.clear();return {moving,ran};}
 
@@ -830,8 +848,9 @@ function segDist(px,py,a,b){const dx=b[0]-a[0],dy=b[1]-a[1];const l=dx*dx+dy*dy|
 const RC=new T3.Raycaster();
 // 从某个世界点朝某个方向射一条线，返回先打中的物体（模拟 Physics.Raycast：只打有碰撞体的物体）
 function raycastW(from,dir,skip){RC.set(new T3.Vector3(from[0],from[1],-from[2]),new T3.Vector3(dir[0],dir[1],-dir[2]).normalize());RC.far=100;
-  const list=[...M3.values()].filter(m=>{const o=obj(m.userData.id);return o&&o.col&&!skip.has(o.id);});
-  const h=RC.intersectObjects(list,true)[0];return h?{o:obj(h.object.userData.id),d:h.distance,p:[h.point.x,h.point.y,-h.point.z]}:null;}
+  const list=[...M3.values()].filter(m=>{const o=obj(m.userData.id);return o&&o.col&&o.layer!=='Ignore Raycast'&&!skip.has(o.id);});
+  const h=RC.intersectObjects(list,true)[0];if(!h)return null;const n=h.face?h.face.normal.clone().transformDirection(h.object.matrixWorld):new T3.Vector3(0,1,0);
+  return {o:obj(h.object.userData.id),d:h.distance,p:[h.point.x,h.point.y,-h.point.z],n:[n.x,n.y,-n.z]};}
 function draw(){
   const game=S.tab==='game',selSet=new Set(game?[]:selIds());const cam=activeCam();icons=[];handles=[];
   gctx.setTransform(DPR,0,0,DPR,0,0);gctx.clearRect(0,0,CW,CH);
@@ -1323,7 +1342,7 @@ const HINT={
 Object.defineProperty(ZTG,'S',{get:()=>S,configurable:true});
 Object.assign(ZTG,{WORDER,WSEL,mkObj,mkAsset,select,P,FL,near,effScale,matOf,mats,asset,makePrefab,spawn,saveScene,ensureMats,instCount,isGray,isOrange,
   stopPlay,addScript,addRigidbody,setParent:reparent,compileScript,closeCode,bakeNav,inCameraView,setSetting,buildExport,enterMode,
-  lib:()=>LIB(),openScene,openBuild,createUI,sceneObjs,curScene:()=>sceneName(S.cur),
+  lib:()=>LIB(),tmplOf,verOf,openScene,openBuild,createUI,sceneObjs,curScene:()=>sceneName(S.cur),
   createSceneAsset:(name,folder)=>{const a=mkAsset('scene',name,folder);S.scenes[a.id]={saved:newSceneJson()};return a;},
   setSceneObjs:(id,objs)=>{if(id===S.cur){S.objs=objs;return;}const d=JSON.parse(S.scenes[id].saved);d[0]=objs;S.scenes[id].saved=JSON.stringify(d);},mkLight,wPos,wAABB,colBounds,uniqueName,importSound,openLighting,openTags,allTags,closeFloat,floatOpen:()=>floatId,isMesh,TAGS,
   setView:(target,dist,yaw,pitch)=>{V.target=target.slice();if(dist)V.dist=dist;if(yaw!=null)V.yaw=yaw;if(pitch!=null)V.pitch=pitch;},
@@ -1788,24 +1807,27 @@ function performDrop(pl,tgt,x,y){const [kind,ids]=pl.split(':');const id=+ids;co
 /* ---------- code window：不挡住编辑器的浮动窗口，可以填空、保存、看报错；播放时正在执行的行会亮 ---------- */
 let codeId=null,codePos=[0,0],codeHot=0,updCount=0;
 function readDrafts(){const out={};$$('#modal .blank').forEach(el=>{out[el.dataset.b]=el.value;});return out;}
-function codeIsDirty(){if(codeId==null)return false;const a=asset(codeId);if(!a)return false;const d=readDrafts();return Object.keys(d).some(k=>d[k]!==String((a.blanks||{})[k]||''));}
+function codeIsDirty(){if(codeId==null)return false;const a=asset(codeId);if(!a)return false;const tm=LIB()[a.name];if(tm&&tm.maxVer&&a.comp&&a.comp.rt.ver!==verOf(a))return true;const d=readDrafts();return Object.keys(d).some(k=>d[k]!==String((a.blanks||{})[k]||''));}
 function explainHTML(a,line){const tm=tmplOf(a);
   if(line!=null){const l=tm.lines[line];const errs=(a.comp&&!a.comp.ok?a.comp.errs:[]).filter(e=>e.line===line);
     const code=l?l.c.map(s=>typeof s==='string'?s:'___').join('').trim():'';
     return `${code?`<b style="font-family:var(--mono)">${esc(code)}</b><br>`:''}${errs.map(e=>`<div class="errt">error ${e.code}: ${esc(e.en)}</div>${ZTG.lang()==='zh'?`<div>${t('errMeaning')}${esc(e.zh)}</div>`:''}`).join('')}${l&&l.x?esc(L(l.x)):''}`;}
   if(!a.comp)return esc(t('codeTip'));
   return a.comp.ok?`<span class="okc">${esc(t('compiledOk'))}</span>`:`<span class="bad">${esc(t('compiledErr',a.comp.errs.length))}</span>`;}
+// 这一步要给分版本的脚本加代码：代码窗口上面出现「加入这一步的新代码」
+function codeUpgrade(a){if(!isLesson()||S.step>=STEPS.length)return null;const u=STEPS[S.step].upgrade;return u&&u.name===a.name&&verOf(a)<u.ver?u:null;}
 function openCode(id,line){const a=asset(id);if(!a)return;const tm=tmplOf(a);S.flags.viewed=true;
   const vals=codeId===id?readDrafts():Object.assign({},a.blanks||{});codeId=id;
   const errs=a.comp&&!a.comp.ok?a.comp.errs:[];const bdef=b=>tm.blanks.find(x=>x.id===b);
   const m=$('#modal');
-  m.innerHTML=`<div class="win" role="dialog" aria-label="${t('codeAria')}" style="transform:translate(${codePos[0]}px,${codePos[1]}px)"><div class="ph cph"><b>${esc(a.name)}.cs</b><span class="cdirty" id="cdirty" hidden>● ${t('unsaved')}</span><span class="sp"></span><span class="crun" id="crun"></span><span class="cvs">${t('codeVs')}</span><button class="btn csave" id="csave">${t('codeSave')}</button><button class="ibtn" id="mclose" aria-label="${t('close')}">✕</button></div>
+  m.innerHTML=`<div class="win" role="dialog" aria-label="${t('codeAria')}" style="transform:translate(${codePos[0]}px,${codePos[1]}px)"><div class="ph cph"><b>${esc(a.name)}.cs</b><span class="cdirty" id="cdirty" hidden>● ${t('unsaved')}</span><span class="sp"></span><span class="crun" id="crun"></span>${codeUpgrade(a)?`<button class="btn primary" id="cup">${t('codeUp')}</button>`:''}<span class="cvs">${t('codeVs')}</span><button class="btn csave" id="csave">${t('codeSave')}</button><button class="ibtn" id="mclose" aria-label="${t('close')}">✕</button></div>
   ${!LIB()[a.name]?`<div class="warnbox" style="margin:8px 12px 0">${esc(t('codeMismatch',a.name))}</div>`:''}
-  <div class="code">${tm.lines.map((l,i)=>`<div class="cl${l.x?' has':''}${errs.some(e=>e.line===i)?' bad':''}" data-i="${i}"><span class="n">${i+1}</span><pre>${l.c.map(seg=>{if(typeof seg==='string')return esc(seg);const d=bdef(seg.b),v=String(vals[seg.b]||'');
+  <div class="code">${tm.lines.map((l,i)=>`<div class="cl${l.x?' has':''}${errs.some(e=>e.line===i)?' bad':''}${a.newFrom!=null&&(l.v||0)>=a.newFrom?' new':''}" data-i="${i}"><span class="n">${i+1}</span><pre>${l.c.map(seg=>{if(typeof seg==='string')return esc(seg);const d=bdef(seg.b),v=String(vals[seg.b]||'');
       return `<input class="blank${errs.some(e=>e.b===seg.b)?' err':''}" data-b="${seg.b}" value="${esc(v)}" size="${Math.max(d.w,v.length+1)}" spellcheck="false" autocomplete="off" aria-label="${esc(L(d.tip))}" title="${esc(L(d.tip))}">`;}).join('')||' '}</pre></div>`).join('')}</div>
   <div class="explain" id="explain">${explainHTML(a,line)}</div></div>`;
   m.classList.add('show');
   $('#mclose').onclick=closeCode;$('#csave').onclick=saveCode;
+  const cu=$('#cup');if(cu)cu.onclick=()=>{const u=codeUpgrade(a);if(!u)return;a.newFrom=verOf(a)+1;a.ver=u.ver;log('info','lCodeUp',a.name);openCode(a.id);};
   const code=$('.code',m);
   code.addEventListener('click',e=>{if(e.target.closest('.blank'))return;const r=e.target.closest('.cl');if(!r)return;$$('.cl.on',m).forEach(x=>x.classList.remove('on'));r.classList.add('on');$('#explain').innerHTML=explainHTML(a,+r.dataset.i);});
   code.addEventListener('input',e=>{const el=e.target.closest('.blank');if(!el)return;el.size=Math.max(bdef(el.dataset.b).w,el.value.length+1);$('#cdirty').hidden=!codeIsDirty();updateHint();});
