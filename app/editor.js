@@ -684,7 +684,23 @@ function runBuild(o,s,a){const tm=tmplOf(a),rt=a.comp.rt,v=s.vals;let root=o;whi
   const st=agentState.get('bs'+o.id)||{cells:new Set()};agentState.set('bs'+o.id,st);st.cells.add(tg.join(','));if(st.cells.size>=4)S.flags.aimed=true;
   // 对着侧面：预览有没有钻进被打中的东西里
   if(Math.abs(h.n[1])<.5&&h.o.col){const b=wAABB(h.o,colBounds(h.o));const inside=!!b&&[0,1,2].every(k=>tg[k]>b[0][k]+.01&&tg[k]<b[1][k]-.01);if(inside)S.flags.sideInside=true;else if(rt.ver>=1&&rt.normal==='normal')S.flags.sideAim=true;}
+  if(rt.ver>=2&&pressedNow.has(rt.left||'Mouse0')){trigFlash.set(a.id,performance.now()+900);
+    const over=boxOverlap(tg,.45),self=over.some(q=>q.cc);
+    if(rt.ver>=4&&over.length){if(self)S.flags.blockedSelf=true;}
+    else{const pa=v.block!=null?asset(v.block):null,pf=pa&&S.prefabs[pa.prefabId];
+      if(!pf)unassigned(a,tm,'block','noBlock');else{const b=instantiate(pf,tg);b.name=pf.name;S.flags.placed=(S.flags.placed||0)+1;if(self)S.flags.selfStuck=true;}}}
+  if(rt.ver>=3&&pressedNow.has('Mouse2')){trigFlash.set(a.id,performance.now()+900);
+    if(!allTags().includes(rt.tag))onceErr(a,'tag_'+rt.tag,()=>logSrc('error','lNoTag',[rt.tag],a,logLineOf(tm,/CompareTag/)));
+    else if(h.o.tag===rt.tag){destroyObj(h.o);S.flags.removed=(S.flags.removed||0)+1;}else S.flags.removeRefused=true;}
   return true;}
+// Physics.CheckBox：这个盒子里有没有碰撞体（角色控制器也算；Ignore Raycast 层不算；触发器也算）
+function boxOverlap(c,hf){const mn=c.map(x=>x-hf),mx=c.map(x=>x+hf);
+  return S.objs.filter(q=>isActive(q)&&q.layer!=='Ignore Raycast'&&(q.col||q.cc)).filter(q=>{const b=q.col?wAABB(q,colBounds(q)):wAABB(q,CC_BOUNDS);return b&&[0,1,2].every(k=>b[0][k]<mx[k]&&b[1][k]>mn[k]);});}
+// Instantiate：照着预制件复制一个新物体（名字是「名字(Clone)」，和 Unity 一样）；播放结束后会跟着场景一起还原
+function instantiate(pf,pos){const o=mkObj(pf.type,pf.name+'(Clone)',pos.slice());o.mat=pf.mat;o.prefab=pf.id;o.rot=pf.rot.slice();o.tag=pf.tag||'Untagged';o.layer=pf.layer||'Default';
+  if(pf.type==='model'){o.model=pf.model;o.col={kind:'box',trigger:false,seq:0};}return o;}
+// Destroy：删掉物体和它的子物体
+function destroyObj(o){const kill=new Set(subtree(o).map(q=>q.id));S.objs=S.objs.filter(q=>!kill.has(q.id));}
 function runScripts(dt,onlyUnscaled){let moving=false;const ran=new Set();walkedPrev=walkedNow;walkedNow=new Set();playT+=dt;
   for(const o of S.objs){if(!isActive(o))continue;for(const s of o.scripts){const a=asset(s.asset);const tm=a&&LIB()[a.name];if(!s.enabled||!tm||!a.comp||!a.comp.ok)continue;if(onlyUnscaled&&tm.kind!=='pause')continue;ran.add(a.id);
     if(!s.vals)s.vals={speed:5};
@@ -1255,7 +1271,10 @@ function exportGuide(l){const zh=l==='zh',v3=v=>`(${v.map(fmt).join(', ')})`,out
     if(o.vol){const v=o.vol;out.push(`${ind}  - ${zh?'Volume 组件：Profile 点 New，再 Add Override → Post-processing → ':'Volume: click New for the Profile, then Add Override → Post-processing → '}${Object.keys(v.ov).map(k=>`${ZTG.tl('en',OVK[k])} (${OV[k].map(([pp])=>`${ZTG.tl('en','ov_'+pp)} ${fmt(v.ov[k][pp])}`).join(', ')})`).join('; ')||'—'}`);}
     if(o.anim)out.push(`${ind}  - Animator: Controller ${(asset(o.anim.ctrl)||{}).name||'None'}`);
     if(o.navs)out.push(`${ind}  - ${zh?'添加组件 → NavMesh Surface，点 Bake（需要 AI Navigation 包）':'Add Component → NavMesh Surface, click Bake (needs the AI Navigation package)'}`);
-    o.scripts.forEach(sc=>{const a=asset(sc.asset);if(!a)return;const vals=Object.entries(sc.vals||{}).map(([k,v])=>`${k} = ${Array.isArray(v)?v.map(id=>(asset(id)||{}).name).join(', '):typeof v==='number'?fmt(v):v!=null&&obj(v)?obj(v).name:'None'}`).join('; ');
+    o.scripts.forEach(sc=>{const a=asset(sc.asset);if(!a)return;const fl=tmplOf(a).fields||[];
+      const vals=Object.entries(sc.vals||{}).map(([k,v])=>{const f=fl.find(x=>x.id===k),ty=f?f.type:'';
+        const txt=Array.isArray(v)?v.map(id=>(asset(id)||{}).name).join(', '):ty==='transform'||ty==='ref'?(v!=null&&obj(v)?obj(v).name:'None'):ty==='aref'||ty==='prefab'?(v!=null&&asset(v)?asset(v).name:'None'):typeof v==='number'?fmt(v):v==null?'None':v;
+        return `${k} = ${txt}`;}).join('; ');
       out.push(`${ind}  - ${zh?'把脚本拖上去':'Drag the script onto it'}: ${a.name}${vals?` (${vals})`:''}`);});
     kids(o).forEach(k=>walk(k,d+1));};
   // 每个场景各列一次（菜单课有主菜单和走廊两个场景）
@@ -1288,7 +1307,7 @@ let drag=null;
 cv.addEventListener('contextmenu',e=>e.preventDefault());
 cv.addEventListener('pointerdown',e=>{
   winClick(S.tab);
-  if(S.tab==='game'){if(document.activeElement&&document.activeElement!==document.body)document.activeElement.blur();if(S.playing&&fpsActive()){lockMouse();drag={t:'look'};cv.setPointerCapture(e.pointerId);}return;}
+  if(S.tab==='game'){if(S.playing){pressedNow.add('Mouse'+e.button);keys.add('Mouse'+e.button);}if(document.activeElement&&document.activeElement!==document.body)document.activeElement.blur();if(S.playing&&fpsActive()){lockMouse();drag={t:'look'};cv.setPointerCapture(e.pointerId);}return;}
   const r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;cv.setPointerCapture(e.pointerId);
   const o=selObj();
   if(e.button!==0||S.tool==='q'){drag={t:'orbit',x:e.clientX,y:e.clientY};return;}
@@ -1309,7 +1328,7 @@ cv.addEventListener('pointermove',e=>{if(!drag||drag.t==='look')return;const r=c
   else if(drag.t==='r'){const k=clamp(1+(e.clientX-drag.x)*.01,.1,6);drag.tg.forEach(q=>{if(q.prefab&&!q.scaleOverride)q.scaleOverride=true;q.scale=drag.scs.get(q.id).map(v=>v*k);});if(Math.abs(k-1)>.05)S.flags.scaled=true;refreshLive();}
 });
 const endDrag=()=>{if(drag&&drag.t!=='orbit'&&drag.t!=='look')commit();drag=null;};
-cv.addEventListener('pointerup',endDrag);cv.addEventListener('pointercancel',endDrag);
+cv.addEventListener('pointerup',e=>{keys.delete('Mouse'+e.button);endDrag();});cv.addEventListener('pointercancel',endDrag);
 cv.addEventListener('wheel',e=>{e.preventDefault();V.dist=clamp(V.dist*(1+e.deltaY*.0012),3,40);},{passive:false});
 function refreshLive(){syncInspector();checkGuide();}
 
@@ -1572,6 +1591,8 @@ function scriptHTML(o,s,i){const a=asset(s.asset),tm=a?tmplOf(a):null,nm=a?a.nam
     if(f.type==='text')return `<div class="vrow"><label>${esc(f.label)}</label><input class="hexin" data-bind="fs.${i}.${f.id}" value="${esc(v==null?f.def:v)}" aria-label="${esc(f.label)}"></div>`;
     if(f.type==='transform'||f.type==='ref'){const tg=v!=null?obj(v):null;const none=f.type==='ref'?`None (${REF_NAME[f.accept]||'Object'})`:f.go?'None (Game Object)':t('noneTransform');
       return `<div class="vrow"><label>${esc(f.label)}</label><div class="slot objref${tg?'':' none'}" data-drop="ref:${o.id}:${i}:${f.id}" title="${esc(t('dropObj'))}">${tg?objIcon(tg,12)+' '+esc(tg.name):esc(none)}${tg?`<span class="sp"></span><button class="ibtn rm" data-act="clrref" data-i="${i}" data-f="${f.id}" aria-label="✕">✕</button>`:''}</div></div>`;}
+    if(f.type==='prefab'){const it=v!=null?asset(v):null;
+      return `<div class="vrow"><label>${esc(f.label)}</label><div class="slot objref${it?'':' none'}" data-drop="pref:${o.id}:${i}:${f.id}" title="${esc(t('dropPrefab'))}">${it?assetIcon(it,12)+' '+esc(it.name):'None (Game Object)'}${it?`<span class="sp"></span><button class="ibtn rm" data-act="clrref" data-i="${i}" data-f="${f.id}" aria-label="✕">✕</button>`:''}</div></div>`;}
     if(f.type==='aref'){const it=v!=null?asset(v):null;
       return `<div class="vrow"><label>${esc(f.label)}</label><div class="slot objref${it?'':' none'}" data-drop="aref:${o.id}:${i}:${f.id}" title="${esc(t('dropAsset'))}">${it?assetIcon(it,12)+' '+esc(it.name):'None (Item Data)'}${it?`<span class="sp"></span><button class="ibtn rm" data-act="clrref" data-i="${i}" data-f="${f.id}" aria-label="✕">✕</button>`:''}</div></div>`;}
     if(f.type==='assetlist'){const list=(v||[]).map(id=>asset(id));
@@ -1774,6 +1795,8 @@ document.addEventListener('pointerup',e=>endDnD(e,true),true);document.addEventL
 document.addEventListener('click',e=>{if(suppress){e.stopPropagation();e.preventDefault();}},true);
 function performDrop(pl,tgt,x,y){const [kind,ids]=pl.split(':');const id=+ids;const dz=tgt&&tgt.closest('[data-drop]');if(!dz)return;const dv=dz.dataset.drop;
   if(kind==='asset'){const a=asset(id);if(!a)return;
+    if(dv.startsWith('pref:')){const [,oid,si,fid]=dv.split(':');const host=obj(+oid),s=host&&host.scripts[+si];if(!s)return;
+      if(a.type!=='prefab'){log('warn','lWrongRef','Prefab');toast(t('lWrongRef','Prefab'));commit();return;}s.vals=s.vals||{};s.vals[fid]=a.id;commit();return;}
     if(dv.startsWith('aref:')){const [,oid,si,fid]=dv.split(':');const host=obj(+oid),s=host&&host.scripts[+si];if(!s)return;
       if(a.type!=='itemdata'){log('warn','lWrongRef','ItemData');toast(t('lWrongRef','ItemData'));commit();return;}s.vals=s.vals||{};s.vals[fid]=a.id;commit();return;}
     if(dv.startsWith('alist:')){const [,oid,si,fid]=dv.split(':');const host=obj(+oid),s=host&&host.scripts[+si];if(!s)return;

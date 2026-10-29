@@ -66,7 +66,7 @@ app/scripts.js        内置 C# 脚本模板：FirstPersonMove（3 个空）、E
                       第 2 章：SurvivalStats（2 个空，饥饿 / 口渴 / 血量）、Inventory（1 个空，字典 + Tab）、DrinkWater、BerryBush、ItemPickup、
                       Crafting（1 个空，&&）、ChopTree、Campfire、SaveGame（2 个空）（PlayerMove 在 ch0.js）
 app/chapters/ch2.js    第 2 章（生存游戏）：setup 是空小岛 + 做好的第一人称玩家（会走路、会按 F 互动）；18 个 STEPS、BUGS、QUIZ、导出说明
-app/chapters/ch3.js    第 3 章（沙盒游戏，制作中）：setup 是沙滩 / 土地 / 城市地图 + 做好的第一人称玩家；现在有「准备」和「瞄准」6 步
+app/chapters/ch3.js    第 3 章（沙盒游戏，制作中）：setup 是沙滩 / 土地 / 城市地图 + 做好的第一人称玩家；现在有「准备」「瞄准」「放和拆」9 步
 app/chapters/chmenu.js 菜单课：setup 用第 1 章下篇做完的走廊；13 个 STEPS（MainMenu 场景 + 暂停菜单）、BUGS、QUIZ、导出说明
 app/chapters/ch1b.js  第 1 章下篇：setup 用第 1 章每一步的 auto 搭好走廊（怪物先关掉），14 个 STEPS、BUGS、QUIZ、导出说明
 app/audio.js          声音：Footstep、Drone、Growl、Scream 都用代码合成（Web Audio），不用下载；ZTG.audio.play() 返回可改音量 / 左右的句柄
@@ -192,7 +192,8 @@ xvfb-run -a -s "-screen 0 1600x1000x24" npx electron --no-sandbox --disable-gpu 
    - 已完成「一、准备」3 步（2026-10-26）：四种方块、透明的玻璃（材质 Surface Type + Alpha）、标签 Block（Tag → Add Tag…，`S.tags`）和预制件（预制件记住 tag，项目窗口选预制件可以改 Tag）。
    - 已完成「二、瞄准」3 步（2026-10-28）：预览方块（Preview_Mat 透明 + 移除盒碰撞体）、BuildSystem 第 0 版（Physics.Raycast + Mathf.Floor 对齐网格，挂在主摄像机上）、第 1 版（hit.point + hit.normal * 0.5f，贴在面的外面）。
    - 分版本脚本已经做好：模板写 `maxVer`，行 / 空格 / 字段写 `v`（从第几版开始）和 `upto`（到第几版被换掉）；`tmplOf(a)` 按 `a.ver` 返回过滤后的模板；步骤写 `upgrade:{name, ver}`，代码窗口就出现「加入这一步的新代码」，新行左边有绿线；章节写 `scriptVer` 决定课程里新建脚本从第几版开始。
-   - 还没做：左键放（Instantiate）、右键拆（CompareTag + Destroy）、不能放在自己身上（Physics.CheckBox）、按 1-4 换方块（数组）、快捷栏 UI、放下的灰尘（粒子爆发 + Stop Action Destroy）、PlayOneShot 声音、美化、JSON 存档（JsonUtility + File）、盖房子。计划把 BuildSystem 做成一个「分版本」的脚本：每一步在代码窗口点「加入这一步的代码」，新的几行出现，只填空。
+   - 已完成「三、放和拆」3 步（2026-10-29）：BuildSystem 第 2 版（Mouse.current.leftButton + Instantiate，Block 格子放预制件）、第 3 版（右键 CompareTag("Block") + Destroy）、第 4 版（Physics.CheckBox 0.45，不能放在有东西的格子里，包括玩家自己）。编辑器：播放时鼠标键记成 'Mouse0' / 'Mouse2'；`instantiate` / `destroyObj` / `boxOverlap`；新字段类型 `prefab`（拖预制件）。
+   - 还没做：按 1-4 换方块（数组）、快捷栏 UI、放下的灰尘（粒子爆发 + Stop Action Destroy）、PlayOneShot 声音、美化、JSON 存档（JsonUtility + File）、盖房子。计划把 BuildSystem 做成一个「分版本」的脚本：每一步在代码窗口点「加入这一步的代码」，新的几行出现，只填空。
 10. 发布新版本：发起人决定 v0.1.0 先保留（2026-10-26），要发布时再在最新的 main 上推新的版本号 tag，确认 Actions 产出三个平台的安装包。
 
 做任何会改变课程内容或方向的决定（章节顺序、步骤内容、换渲染技术）之前，先问发起人。

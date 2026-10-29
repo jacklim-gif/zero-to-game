@@ -1,6 +1,6 @@
 // 第 3 章：沙盒游戏 —— 像 Minecraft 一样在地图上盖房子（画面不是像素风，方块用平滑的颜色）。
 // 开场：一张做好的地图（沙滩、土地、城市）和一个做好的第一人称玩家。
-// 现在有前 6 步：准备（四种方块、透明的玻璃、标签 Block 和预制件）+ 瞄准（预览方块、BuildSystem 射线和网格、hit.normal）。放置、拆除之后再加。
+// 现在有前 9 步：准备（四种方块、透明的玻璃、标签 Block 和预制件）+ 瞄准（预览方块、BuildSystem 射线和网格、hit.normal）+ 放和拆（Instantiate、CompareTag + Destroy、Physics.CheckBox）。
 (() => {
 'use strict';
 const G = window.ZTG;
@@ -57,6 +57,12 @@ function refSlot(host, name, fid, target) {
   const s = scriptOn(host, name); if (!s || !target || s.vals[fid] === target.id) return null;
   return selFirst(host) || {from:H().row(target.id), to:slotSel(host, name, fid, 'ref'), label:T(`把 ${target.name} 拖进 ${fid} 格子`, `Drag ${target.name} into the ${fid} slot`)};
 }
+// 把项目窗口里的预制件拖进脚本的 GameObject 格子
+function prefabSlot(host, name, fid, pa) {
+  const s = scriptOn(host, name); if (!s || !pa || s.vals[fid] === pa.id) return null;
+  const r = H().reach(pa); if (r.nav) return r;
+  return selFirst(host) || {from:r.at, to:slotSel(host, name, fid, 'pref'), label:T(`把预制件 ${pa.name} 拖进 ${fid} 格子`, `Drag the ${pa.name} prefab into the ${fid} slot`)};
+}
 const refOk = (host, name, fid, target) => { const s = scriptOn(host, name); return !!s && !!target && s.vals[fid] === target.id; };
 const playStep = (doneFlag, during) => {
   if (!G.S.playing) return doneFlag ? null : {at:'#playbtn', label:T('点播放', 'Click Play')};
@@ -76,6 +82,8 @@ const glassMat = () => matNamed('Glass_Mat');
 const glassOk = m => !!m && m.surface === 'transparent' && m.alpha != null && m.alpha <= .6 && m.alpha >= .05 && isBlue(m.color);
 const prefabOf = n => Object.values(G.S.prefabs).find(pf => pf.name === n && G.asset(pf.assetId));
 const hasTag = () => G.allTags().includes('Block');
+const prefabAsset = n => { const pf = prefabOf(n); return pf ? G.asset(pf.assetId) : null; };
+const bsRt = () => { const a = scriptA('BuildSystem'); return a && a.comp ? a.comp.rt : {}; };
 const preview = () => G.S.objs.find(o => o.type === 'cube' && o.name === 'Preview');
 const lum = c => { const [r, g, b] = rgb(c); return .2126 * r + .7152 * g + .0722 * b; };
 const isLight = c => lum(c) > .75;
@@ -200,17 +208,60 @@ const STEPS = [
   hint:T('新加的那一行左边有一条绿线。真 Unity 里没有这个按钮，你要自己把这一行打进去。', 'The new line has a green bar on its left. Real Unity has no such button — you’d type the line yourself.'),
   note:T('现在对着方块的顶面、侧面，预览都会贴在外面：下一步就可以放方块了。', 'Now the preview sits outside both the top and the sides of a block — ready for placing blocks next.'),
   auto:() => { if (G.S.playing) G.stopPlay(); const c = cam(); if (!c) return; const pv = preview(); const s = attach(c, 'BuildSystem', 1); if (pv) s.vals.preview = pv.id; G.S.flags.sideAim = true; }},
+
+ // 7
+ {title:T('左键放方块', 'Left-click to place a block'), glow:() => G.S.playing ? ['#playbtn'] : ['#p-proj', '#p-insp'], play:true, upgrade:{name:'BuildSystem', ver:2},
+  point:() => { const c = cam(); if (!c) return null;
+    if (!G.S.playing) { const sf = scriptFlow('BuildSystem', c, 2); if (sf) return sf; const r = prefabSlot(c, 'BuildSystem', 'block', prefabAsset('Dirt')); if (r) return r; }
+    return playStep((G.S.flags.placed || 0) >= 3, {at:'#cwrap', label:T('看着地面按鼠标左键，放 3 个方块', 'Look at the ground and left-click to place 3 blocks')}); },
+  body:T('打开 BuildSystem，点「加入这一步的新代码」：按鼠标 <b>左键</b> 就调用 Place()，它用 <b>Instantiate</b> 照着预制件复制出一个新方块，放在预览的位置。填好 2 个空，保存，再把项目窗口里的 <b>Dirt 预制件</b> 拖进检查器的 Block 格子。点播放，放几个方块，还可以叠高。',
+         'Open BuildSystem and click “Add this step’s code”: a <b>left-click</b> calls Place(), which uses <b>Instantiate</b> to make a new copy of the prefab where the preview is. Fill the 2 blanks, save, then drag the <b>Dirt prefab</b> from the Project window into the Block slot in the Inspector. Press Play and place a few blocks — you can stack them too.'),
+  conds:[[T('加入这一步的新代码，填好 2 个空并保存', 'Add this step’s code, fill the 2 blanks and save'), () => codeOk('BuildSystem', 2) && bsRt().left === 'Mouse0'],
+         [T('把 Dirt 预制件拖进 Block 格子', 'Drag the Dirt prefab into the Block slot'), () => { const s = scriptOn(cam(), 'BuildSystem'), pa = prefabAsset('Dirt'); return !!s && !!pa && s.vals.block === pa.id; }],
+         [T('点播放，用左键放 3 个方块', 'Press Play and place 3 blocks with left-click'), () => (G.S.flags.placed || 0) >= 3]],
+  hint:T('第一次点画面是让鼠标锁住（用来转头），这一下也会放一个方块，和真 Unity 一样。放出来的方块会出现在层级最下面；停止播放后它们都会消失，这是播放模式，存档在后面做。', 'The first click locks the mouse (for looking around), and that click also places a block — same as real Unity. New blocks appear at the bottom of the Hierarchy; they all vanish when you stop, because it’s Play mode. Saving comes later.'),
+  note:T('低头看脚下再按左键试试：方块会放在你站的地方，你会被弹到方块上面（有时会卡住）。第 9 步修好它。', 'Look down at your feet and left-click: the block lands where you stand and pops you up on top of it (sometimes you get stuck). Step 9 fixes that.'),
+  auto:() => { if (G.S.playing) G.stopPlay(); const c = cam(); if (!c) return; const s = attach(c, 'BuildSystem', 2); const pv = preview(), pa = prefabAsset('Dirt'); if (pv) s.vals.preview = pv.id; if (pa) s.vals.block = pa.id; G.S.flags.placed = 3; }},
+
+ // 8
+ {title:T('右键拆方块', 'Right-click to remove a block'), glow:() => G.S.playing ? ['#playbtn'] : ['#p-proj'], play:true, upgrade:{name:'BuildSystem', ver:3},
+  point:() => { const c = cam(); if (!c) return null; const F = G.S.flags;
+    if (!G.S.playing) { const sf = scriptFlow('BuildSystem', c, 3); if (sf) return sf; }
+    if (!(F.removed >= 1)) return playStep(false, {at:'#cwrap', label:T('看着一个方块按鼠标右键', 'Look at a block and right-click')});
+    return playStep(F.removeRefused, {at:'#cwrap', label:T('看着楼或地面按右键：拆不掉', 'Right-click a building or the ground: it won’t go')}); },
+  body:T('再加一步代码：按 <b>右键</b> 调用 Remove()。它先用 <b>CompareTag</b> 看打中的东西是不是贴着 Block 标签（第 3 步贴的），是的话才用 <b>Destroy</b> 删掉。填好 2 个空，保存。播放：右键能拆方块，但楼和地面拆不掉。',
+         'One more piece of code: a <b>right-click</b> calls Remove(). It first uses <b>CompareTag</b> to check that what we hit wears the Block tag (from step 3), and only then deletes it with <b>Destroy</b>. Fill the 2 blanks and save. Play: right-click removes blocks, but buildings and the ground stay.'),
+  conds:[[T('加入这一步的新代码，填好 2 个空并保存', 'Add this step’s code, fill the 2 blanks and save'), () => codeOk('BuildSystem', 3) && bsRt().tag === 'Block'],
+         [T('点播放，右键拆掉一个方块', 'Press Play and remove a block with right-click'), () => (G.S.flags.removed || 0) >= 1],
+         [T('右键点楼或地面：拆不掉', 'Right-click a building or the ground: it won’t be removed'), () => !!G.S.flags.removeRefused]],
+  hint:T('标签名要一字不差：写成 block（小写）的话，控制台会报「Tag: block is not defined」。', 'The tag must match exactly: writing block (lowercase) makes the Console say “Tag: block is not defined”.'),
+  note:T('一开始排好的四个方块也贴着 Block，所以也拆得掉。', 'The four blocks you lined up at the start also wear Block, so they can be removed too.'),
+  auto:() => { if (G.S.playing) G.stopPlay(); const c = cam(); if (!c) return; attach(c, 'BuildSystem', 3); Object.assign(G.S.flags, {removed:1, removeRefused:true}); }},
+
+ // 9
+ {title:T('不能放在自己身上', 'Not inside yourself'), glow:() => G.S.playing ? ['#playbtn'] : ['#p-proj'], play:true, upgrade:{name:'BuildSystem', ver:4},
+  point:() => { const c = cam(); if (!c) return null;
+    if (!G.S.playing) { const sf = scriptFlow('BuildSystem', c, 4); if (sf) return sf; }
+    return playStep(G.S.flags.blockedSelf, {at:'#cwrap', label:T('低头看脚下，按左键：放不下去', 'Look down at your feet and left-click: nothing is placed')}); },
+  body:T('现在低头看脚下按左键，方块会放在你站的地方，把你弹到上面或卡住。加最后一行代码：放之前先用 <b>Physics.CheckBox</b> 问「这一格里有没有东西」。你自己（角色控制器）也算东西，所以就放不下去了；已经有方块的格子也一样。',
+         'Right now, looking down at your feet and left-clicking puts a block where you stand, popping you up or getting you stuck. Add one last line: before placing, ask <b>Physics.CheckBox</b> “is anything in this cell?”. You (the Character Controller) count, so nothing is placed — same for a cell that already holds a block.'),
+  conds:[[T('加入这一步的新代码，填好空并保存', 'Add this step’s code, fill the blank and save'), () => codeOk('BuildSystem', 4)],
+         [T('点播放，低头看脚下按左键：放不下去', 'Press Play, look down at your feet and left-click: nothing is placed'), () => !!G.S.flags.blockedSelf]],
+  hint:T('Vector3.one * 0.45f 是盒子的「半边长」：整个盒子 0.9 米，比一格小一点，旁边贴着的方块才不会算进去。', 'Vector3.one * 0.45f is the box’s half-size: the whole box is 0.9 m, a bit smaller than a cell, so blocks touching from the side don’t count.'),
+  note:T('放和拆都做好了：现在可以盖东西了。下一部分：按 1-4 换方块。', 'Placing and removing both work: you can build now. Next part: switching blocks with 1-4.'),
+  auto:() => { if (G.S.playing) G.stopPlay(); const c = cam(); if (!c) return; attach(c, 'BuildSystem', 4); G.S.flags.blockedSelf = true; }},
 ];
 
 
+
 const FINISH = {
- zh:`<div class="finish"><div class="gstep">完成</div><h2>第 3 章前 6 步完成：准备和瞄准</h2>
-<p>你做好了四种方块（土、沙、砖、玻璃）、透明的玻璃、标签 Block 和预制件；还做了半透明的预览方块，用射线（Raycast）和 Mathf.Floor 让它对齐网格，用 hit.normal 让它贴在面的外面。</p>
-<div class="note">下一部分：按左键放方块、右键拆方块、不能放在自己身上。这部分还在制作中。</div>
+ zh:`<div class="finish"><div class="gstep">完成</div><h2>第 3 章前 9 步完成：准备、瞄准、放和拆</h2>
+<p>你做好了四种方块（土、沙、砖、玻璃）、透明的玻璃、标签 Block 和预制件；还做了半透明的预览方块，用射线（Raycast）和 Mathf.Floor 让它对齐网格，用 hit.normal 让它贴在面的外面；最后用 Instantiate 放方块、CompareTag 和 Destroy 拆方块、Physics.CheckBox 不让方块放在自己身上。</p>
+<div class="note">下一部分：按 1-4 换方块、快捷栏、灰尘和声音、JSON 存档。这部分还在制作中。</div>
 <div class="gact"><button class="btn primary" data-act="quiz">小测验</button><button class="btn" data-act="export">导出到真 Unity</button><button class="btn" data-act="reset">再做一遍</button><button class="btn quiet" data-act="home">回到主页</button></div></div>`,
- en:`<div class="finish"><div class="gstep">Done</div><h2>Chapter 3, first 6 steps complete: getting ready and aiming</h2>
-<p>You made four kinds of blocks (dirt, sand, brick, glass), see-through glass, a Block tag and prefabs; then a see-through preview block that snaps to the grid with a Raycast and Mathf.Floor, and sits outside faces thanks to hit.normal.</p>
-<div class="note">Next part: left-click to place blocks, right-click to remove them, and not building inside yourself. It’s still being made.</div>
+ en:`<div class="finish"><div class="gstep">Done</div><h2>Chapter 3, first 9 steps complete: getting ready, aiming, placing and removing</h2>
+<p>You made four kinds of blocks (dirt, sand, brick, glass), see-through glass, a Block tag and prefabs; then a see-through preview block that snaps to the grid with a Raycast and Mathf.Floor, and sits outside faces thanks to hit.normal; finally Instantiate places blocks, CompareTag and Destroy remove them, and Physics.CheckBox keeps blocks out of your own body.</p>
+<div class="note">Next part: switching blocks with 1-4, a hotbar, dust and sounds, and JSON saving. It’s still being made.</div>
 <div class="gact"><button class="btn primary" data-act="quiz">Quiz</button><button class="btn" data-act="export">Export to real Unity</button><button class="btn" data-act="reset">Do it again</button><button class="btn quiet" data-act="home">Back to home</button></div></div>`};
 
 // 开场地图：海在最下面兜底；沙滩、土地、城市三块地并排（每块 10 × 20 米）；城市里有马路、四栋楼和路灯
@@ -233,7 +284,7 @@ function setup() {
   G.saveScene(); G.S.flags.saved = false; G.S.logs.length = 0;
 }
 
-// 找 Bug 挑战：做完前面的步骤，再弄坏 3 个地方
+// 找 Bug 挑战：做完前面的步骤，再弄坏 4 个地方
 const BUGS = {
  setup:() => {
   setup(); STEPS.forEach(st => { if (st.enter) st.enter(); st.auto(); }); G.closeFloat(); G.select(null);
@@ -241,6 +292,7 @@ const BUGS = {
   const m = glassMat(); if (m) m.surface = 'opaque';
   const pf = prefabOf('Glass'); if (pf) pf.tag = 'Untagged'; const g = cube('Glass'); if (g) g.tag = 'Untagged';
   const pv = preview(); if (pv) pv.col = {kind:'box', trigger:false, seq:1};
+  const bs = scriptA('BuildSystem'); if (bs) { bs.blanks.tag = 'block'; G.compileScript(bs); }
   G.S.cwd = 0; G.saveScene(); },
  list:[
   {title:T('玻璃一点都不透明', 'The glass isn’t see-through at all'),
@@ -251,7 +303,10 @@ const BUGS = {
    check:() => { const pf = prefabOf('Glass'); return !!pf && pf.tag === 'Block'; }},
   {title:T('播放时预览方块一直往你脸上跑，还一闪一闪的', 'In Play the preview block keeps creeping toward your face and flickering'),
    hint:T('射线打中了谁？看游戏视图下面的「射线打中」。选中 Preview，看它有没有不该有的组件。', 'What is the ray hitting? Check “Ray hits” at the bottom of the Game view. Select Preview and look for a component it shouldn’t have.'),
-   check:() => !!preview() && !preview().col}]};
+   check:() => !!preview() && !preview().col},
+  {title:T('右键拆不掉方块，控制台还有红字', 'Right-click doesn’t remove blocks, and the Console shows a red error'),
+   hint:T('播放后右键点一个方块，看控制台的红字说哪个标签不存在。打开 BuildSystem，看 CompareTag 里写的标签名，大小写对吗？', 'Play, right-click a block, and read the red error: which tag doesn’t exist? Open BuildSystem and check the tag name in CompareTag — are the capitals right?'),
+   check:() => { const a = scriptA('BuildSystem'); return !!a && !!a.comp && a.comp.ok && a.comp.rt.tag === 'Block'; }}]};
 
 const QUIZ = [
  {q:T('Glass_Mat 的透明度 A 是 0.35，可是玻璃还是不透明。最可能是什么原因？', 'Glass_Mat has Alpha 0.35, but the glass is still solid. What’s the most likely reason?'),
@@ -271,7 +326,13 @@ const QUIZ = [
   w:T('normal 是那一面朝外的方向：顶面朝上，侧面朝左右前后。', 'normal is the direction the face points: up for the top, sideways for the sides.')},
  {q:T('预览方块为什么要移除碰撞体？', 'Why remove the preview block’s collider?'),
   o:[T('让它变透明', 'To make it see-through'), T('不然射线会打中预览自己，它会一直往你脸上跑', 'Otherwise the ray hits the preview itself and it creeps toward your face'), T('让它掉下去', 'So it falls'), T('省电', 'To save power')], a:1,
-  w:T('射线只打得到有碰撞体的东西；预览只是给你看的，不需要碰撞。', 'Rays only hit colliders; the preview is just for show and needs no collisions.')}];
+  w:T('射线只打得到有碰撞体的东西；预览只是给你看的，不需要碰撞。', 'Rays only hit colliders; the preview is just for show and needs no collisions.')},
+ {q:T('Instantiate(block, target, Quaternion.identity) 做了什么？', 'What does Instantiate(block, target, Quaternion.identity) do?'),
+  o:[T('删掉 block', 'Deletes block'), T('照着预制件 block 复制一个新物体，放在 target', 'Makes a new copy of the block prefab at target'), T('把 block 变透明', 'Makes block see-through'), T('存档', 'Saves the game')], a:1,
+  w:T('Quaternion.identity 是「不旋转」。播放时复制出来的物体，停止后会消失。', 'Quaternion.identity means “no rotation”. Copies made during Play vanish when you stop.')},
+ {q:T('Physics.CheckBox 在放方块之前问的是什么？', 'What does Physics.CheckBox ask before a block is placed?'),
+  o:[T('这一格里有没有碰撞体（例如你自己）', 'Is any collider in this cell (like you)?'), T('鼠标有没有按下', 'Is the mouse pressed?'), T('方块是什么颜色', 'What color is the block?'), T('标签对不对', 'Is the tag right?')], a:0,
+  w:T('有东西就不放：不会把方块放进自己身体里，也不会两个方块叠在同一格。', 'If something is there, nothing is placed: no blocks inside your body, and never two blocks in one cell.')}];
 
 const EXPORT_INTRO = {
  zh:'# 在真 Unity 里做「沙盒游戏」的准备\n\n1. 用 Unity Hub 安装 Unity 6.3 LTS，新建项目，模板选 **Universal 3D**。\n2. 把这个压缩包里的 `Assets/Scripts` 文件夹拖进 Unity 的项目窗口。\n3. 透明材质：选中材质，在 Surface Options 里把 Surface Type 改成 Transparent，再点 Base Map 的颜色，把 A 调低。\n4. 新标签：选中物体，检查器最上面 Tag → Add Tag…，在 Tags 下面点 +。\n5. 照下面的清单，一个一个建出物体、材质和设置。\n',

@@ -997,13 +997,19 @@ const SaveGame = {
 // ---------- 第 3 章：沙盒游戏 ----------
 // BuildSystem 是分版本的脚本：每一步在代码窗口点「加入这一步的新代码」，多出几行（v 从第几版开始有，upto 到第几版被换掉）
 const BuildSystem = {
-  name: 'BuildSystem', kind: 'build', maxVer: 1,
-  fields: [{ id: 'preview', label: 'Preview', type: 'transform', go: true, def: null }, { id: 'reach', label: 'Reach', type: 'float', def: 6 }],
+  name: 'BuildSystem', kind: 'build', maxVer: 4,
+  fields: [{ id: 'preview', label: 'Preview', type: 'transform', go: true, def: null }, { id: 'reach', label: 'Reach', type: 'float', def: 6 },
+           { id: 'block', label: 'Block', type: 'prefab', v: 2, def: null }],
   blanks: [
     { id: 'ray', w: 7, tip: { zh: '从一个点往一个方向射线：Raycast', en: 'Shoot a ray from a point in a direction: Raycast' } },
     { id: 'floor', w: 5, tip: { zh: '往下取整：Floor', en: 'Round down: Floor' } },
-    { id: 'normal', w: 6, v: 1, tip: { zh: '打中的那一面朝外的方向：normal', en: 'The direction the hit face points: normal' } }],
-  answers: { ray: 'Raycast', floor: 'Floor', normal: 'normal' },
+    { id: 'normal', w: 6, v: 1, tip: { zh: '打中的那一面朝外的方向：normal', en: 'The direction the hit face points: normal' } },
+    { id: 'left', w: 10, v: 2, tip: { zh: '鼠标左键：leftButton', en: 'The left mouse button: leftButton' } },
+    { id: 'inst', w: 11, v: 2, tip: { zh: '照着预制件复制一个：Instantiate', en: 'Make a copy of a prefab: Instantiate' } },
+    { id: 'tag', w: 5, v: 3, tip: { zh: '方块的标签名：Block', en: 'The blocks’ tag name: Block' } },
+    { id: 'destroy', w: 7, v: 3, tip: { zh: '删掉物体：Destroy', en: 'Delete an object: Destroy' } },
+    { id: 'box', w: 8, v: 4, tip: { zh: '看一个盒子里有没有东西：CheckBox', en: 'Check whether anything is inside a box: CheckBox' } }],
+  answers: { ray: 'Raycast', floor: 'Floor', normal: 'normal', left: 'leftButton', inst: 'Instantiate', tag: 'Block', destroy: 'Destroy', box: 'CheckBox' },
   compile(b, ver) {
     const E = [], rt = {};
     const r = val(b, 'ray');
@@ -1019,14 +1025,38 @@ const BuildSystem = {
       else if (n === 'normal' || n === 'point') rt.normal = n;
       else E.push({ b: 'normal', code: 'CS1061', en: `'RaycastHit' does not contain a definition for '${n}' and no accessible extension method '${n}' accepting a first argument of type 'RaycastHit' could be found (are you missing a using directive or an assembly reference?)`, zh: `RaycastHit 没有「${n}」。那一面朝外的方向叫 normal（全小写）。` });
     }
+    if (ver >= 2) {
+      // 鼠标的三个键都能编译；写成 rightButton 的话，左右就反了
+      const l = val(b, 'left'), btn = { leftButton: 'Mouse0', middleButton: 'Mouse1', rightButton: 'Mouse2' };
+      if (!l) E.push({ b: 'left', code: 'CS1001', en: 'Identifier expected', zh: '点号后面空着，要填 leftButton。' });
+      else if (btn[l]) rt.left = btn[l];
+      else E.push({ b: 'left', code: 'CS1061', en: `'Mouse' does not contain a definition for '${l}' and no accessible extension method '${l}' accepting a first argument of type 'Mouse' could be found (are you missing a using directive or an assembly reference?)`, zh: `鼠标没有「${l}」。左键要写 leftButton（B 大写）。` });
+      const ins = val(b, 'inst');
+      if (!ins) E.push({ b: 'inst', code: 'CS1525', en: "Invalid expression term '('", zh: '等号后面空着，要填 Instantiate。' });
+      else if (ins !== 'Instantiate') E.push({ b: 'inst', code: 'CS0103', en: `The name '${ins}' does not exist in the current context`, zh: `电脑不认识「${ins}」。复制预制件要写 Instantiate（I 大写）。` });
+    }
+    if (ver >= 3) {
+      rt.tag = val(b, 'tag');
+      if (/"/.test(rt.tag)) E.push({ b: 'tag', code: 'CS1026', en: ') expected', zh: '引号里面只写标签名 Block，不用再加引号。' });
+      const d = val(b, 'destroy');
+      if (!d) E.push({ b: 'destroy', code: 'CS1525', en: "Invalid expression term '('", zh: '这里空着，要填 Destroy。' });
+      else if (d !== 'Destroy') E.push({ b: 'destroy', code: 'CS0103', en: `The name '${d}' does not exist in the current context`, zh: `电脑不认识「${d}」。删掉物体要写 Destroy（D 大写）。` });
+    }
+    if (ver >= 4) {
+      const x = val(b, 'box');
+      if (!x) E.push({ b: 'box', code: 'CS1001', en: 'Identifier expected', zh: '点号后面空着，要填 CheckBox。' });
+      else if (x !== 'CheckBox') E.push({ b: 'box', code: 'CS0117', en: `'Physics' does not contain a definition for '${x}'`, zh: `Physics 没有「${x}」。看盒子里有没有东西要写 CheckBox（C、B 大写）。` });
+    }
     return { errors: E, rt };
   },
   lines: [
     { c: ['using UnityEngine;'] },
+    { c: ['using UnityEngine.InputSystem;'], v: 2, x: { zh: '引入新版输入系统，才能读鼠标按键。', en: 'Brings in the new Input System so we can read the mouse buttons.' } },
     { c: [''] },
     { c: ['public class BuildSystem : MonoBehaviour'], x: { zh: '盖房子的脚本，挂在主摄像机上：从屏幕中间（准星）往前射一条线，打中哪里，预览方块就对齐网格放到哪里。', en: 'The building script, on the Main Camera: it shoots a ray straight out of the screen center (the crosshair), and the preview block snaps to the grid wherever it hits.' } },
     { c: ['{'] },
     { c: ['    public GameObject preview;'], err: 'noPreview', x: { zh: '半透明的预览方块。把层级里的 Preview 拖进检查器的这一格。', en: 'The see-through preview block. Drag Preview from the Hierarchy into this slot in the Inspector.' } },
+    { c: ['    public GameObject block;'], v: 2, x: { zh: '要放的方块：把项目窗口里的预制件（例如 Dirt）拖进检查器的这一格。', en: 'The block to place: drag a prefab (like Dirt) from the Project window into this slot in the Inspector.' } },
     { c: ['    public float reach = 6f;'], x: { zh: '手能伸多远：射线最远 6 米。太远的地方放不了。', en: 'How far you can reach: the ray goes at most 6 meters. You can’t build farther away.' } },
     { c: ['    RaycastHit hit;'], x: { zh: '用来存射线打中的东西：打中了谁、打中的点、那一面朝哪。', en: 'Holds what the ray hit: which object, the hit point, and which way that face points.' } },
     { c: ['    Vector3 target;'], x: { zh: '方块要放进去的那一格的中心。', en: 'The center of the grid cell the block will go into.' } },
@@ -1041,8 +1071,24 @@ const BuildSystem = {
     { c: ['        Vector3 p = hit.point + hit.', B('normal'), ' * 0.5f;'], v: 1, run: 'update', x: { zh: 'hit.normal 是打中的那一面「朝外」的方向（例如顶面朝上、左边那面朝左）。从打中的点往外走半格，就一定落在旁边那一格里，不会钻进方块。', en: 'hit.normal is the direction the hit face points outward (the top points up, the left side points left). Stepping half a cell outward from the hit point always lands in the neighboring cell, never inside the block.' } },
     { c: ['        target = new Vector3(Snap(p.x), Snap(p.y), Snap(p.z));'], run: 'update', x: { zh: 'X、Y、Z 三个方向都对齐到格子中心。', en: 'Snap X, Y and Z to the center of a grid cell.' } },
     { c: ['        preview.transform.position = target;'], run: 'move', x: { zh: '把预览方块搬到那一格。', en: 'Move the preview block to that cell.' } },
+    { c: [''], v: 2, run: 'update' },
+    { c: ['        if (Mouse.current.', B('left'), '.wasPressedThisFrame) Place();'], v: 2, run: 'update', key: 'Mouse0', x: { zh: 'wasPressedThisFrame：这一帧刚按下去（按住不放不会一直放）。按左键就放一个方块。', en: 'wasPressedThisFrame: pressed down this very frame (holding it doesn’t keep placing). Left-click places a block.' } },
+    { c: ['        if (Mouse.current.rightButton.wasPressedThisFrame) Remove();'], v: 3, run: 'update', key: 'Mouse2', x: { zh: '按右键就拆掉看着的那个方块。', en: 'Right-click removes the block you’re looking at.' } },
     { c: ['    }'], run: 'update' },
     { c: [''] },
+    { c: ['    void Place()'], v: 2, run: 'trigger' },
+    { c: ['    {'], v: 2, run: 'trigger' },
+    { c: ['        if (Physics.', B('box'), '(target, Vector3.one * 0.45f)) return;'], v: 4, run: 'trigger', x: { zh: 'Physics.CheckBox：在 target 放一个看不见的盒子，问「里面有没有碰撞体」。有（例如你自己站在那里）就不放。半边长 0.45 比 0.5 小一点，旁边贴着的方块才不算。', en: 'Physics.CheckBox: puts an invisible box at target and asks “is any collider inside?”. If so (say, you’re standing there), don’t place. The half-size 0.45 is a bit less than 0.5, so blocks touching from the side don’t count.' } },
+    { c: ['        GameObject b = ', B('inst'), '(block, target, Quaternion.identity);'], v: 2, run: 'trigger', err: 'noBlock', x: { zh: 'Instantiate：照着预制件复制一个新物体，放在 target，不旋转（Quaternion.identity）。播放时新出来的方块会出现在层级里。', en: 'Instantiate: makes a new copy of the prefab at target with no rotation (Quaternion.identity). New blocks show up in the Hierarchy during Play.' } },
+    { c: ['        b.name = block.name;'], v: 2, run: 'trigger', x: { zh: '复制出来的名字会叫「Dirt(Clone)」，改回「Dirt」，层级比较好看，存档时也用得到。', en: 'Copies are named “Dirt(Clone)”; renaming them to “Dirt” keeps the Hierarchy tidy and helps with saving later.' } },
+    { c: ['    }'], v: 2, run: 'trigger' },
+    { c: [''], v: 2 },
+    { c: ['    void Remove()'], v: 3, run: 'trigger' },
+    { c: ['    {'], v: 3, run: 'trigger' },
+    { c: ['        if (hit.collider.CompareTag("', B('tag'), '"))'], v: 3, run: 'trigger', x: { zh: 'CompareTag：看打中的东西是不是贴着这个标签。只有方块贴了 Block，所以楼和地面拆不掉。标签名要一字不差，写错了 Unity 会报错。', en: 'CompareTag: checks whether what we hit has this tag. Only blocks have Block, so buildings and the ground can’t be removed. The name must match exactly or Unity reports an error.' } },
+    { c: ['            ', B('destroy'), '(hit.collider.gameObject);'], v: 3, run: 'trigger', x: { zh: 'Destroy：把这个物体删掉。', en: 'Destroy: deletes that object.' } },
+    { c: ['    }'], v: 3, run: 'trigger' },
+    { c: [''], v: 3 },
     { c: ['    float Snap(float v)'], run: 'update', x: { zh: '对齐网格：把任何数变成它所在那一格的中心。', en: 'Snap to the grid: turn any number into the center of the cell it falls in.' } },
     { c: ['    {'], run: 'update' },
     { c: ['        return Mathf.', B('floor'), '(v) + 0.5f;'], run: 'update', x: { zh: 'Mathf.Floor 是往下取整：2.7 → 2，-0.3 → -1。再加 0.5 就是这一格的中心（方块边长 1，中心在 .5 上）。写成 Round（四舍五入）也能编译，但方块会差半格。', en: 'Mathf.Floor rounds down: 2.7 → 2, -0.3 → -1. Adding 0.5 gives the cell’s center (blocks are 1 wide, centered on .5). Round also compiles, but blocks end up half a cell off.' } },
